@@ -11,6 +11,7 @@ export type TargetKind =
   | 'rule'
   | 'html'
   | 'component'
+  | 'code'
   | 'unknown'
 
 export interface StudioTarget {
@@ -25,6 +26,11 @@ export interface StudioTarget {
   tag?: string
   /** True when the block is wrapped in, or carries, a `v-drag` position. */
   positioned: boolean
+  /**
+   * The element shares its Markdown block with siblings, so actions that move
+   * or duplicate whole blocks do not apply to it.
+   */
+  nested: boolean
   /** Short human label for the UI. */
   label: string
 }
@@ -55,12 +61,15 @@ export interface PropOption {
   preview?: string
 }
 
+export type PropControl = 'text' | 'number' | 'boolean' | 'select' | 'list' | 'color' | 'color[]'
+
 export interface PropMeta {
   name: string
   type?: string
   required?: boolean
   default?: string
   label?: string
+  control?: PropControl
   options?: PropOption[]
   hidden?: boolean
 }
@@ -85,6 +94,8 @@ export interface CatalogLayout {
   source: CatalogComponent['source']
   origin: string
   description?: string
+  /** Frontmatter keys this layout reads, editable as a form. */
+  props: PropMeta[]
   load?: () => Promise<any>
 }
 

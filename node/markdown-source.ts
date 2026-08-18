@@ -1,11 +1,14 @@
 import type MarkdownIt from 'markdown-it'
 import type Token from 'markdown-it/lib/token.mjs'
+import { tagSignature } from '../shared/signature'
+import { scanTags } from './html-scan'
 
 /**
  * Attribute carrying the Markdown line range a rendered element came from.
  * Value is `"<startLine>,<endLine>"`, zero-based and end-exclusive, relative to
- * the *slide content*, the part of the slide after its frontmatter. That is the same
- * coordinate space as `SlideInfo.content`, which is what the editor patches.
+ * the *slide content*, the part of the slide after its frontmatter. That is the
+ * same coordinate space as `SlideInfo.content`, which is what the editor
+ * patches.
  *
  * It is a hint, not a contract: a custom `setup/transformers.ts` can shift
  * lines before markdown-it sees them, so the client re-validates every range
@@ -24,6 +27,16 @@ export const KIND_ATTR = 'data-studio-kind'
  */
 export const TAG_ATTR = 'data-studio-tag'
 
+/** Fingerprint of the opening tag, so identical siblings can be told apart. */
+export const SIG_ATTR = 'data-studio-sig'
+
+/**
+ * Set on a tag that is not the outermost one in its block. Such an element
+ * shares a Markdown block with its neighbours, so actions that insert or move
+ * whole blocks do not apply to it.
+ */
+export const NESTED_ATTR = 'data-studio-nested'
+
 /** Block-level tokens we can safely hang an attribute on. */
 const BLOCK_TOKENS: Record<string, string> = {
   heading_open: 'heading',
@@ -36,12 +49,6 @@ const BLOCK_TOKENS: Record<string, string> = {
   hr: 'rule',
 }
 
-/**
- * Matches the first opening tag of an HTML block so we can inject into it the
- * same way Slidev injects `:markdownSource` for `v-drag`.
- */
-const RE_FIRST_TAG = /^(\s*)<([A-Za-z][\w.-]*)((?:\s[^>]*?)?)(\/?)>/
-
 /** Raw HTML shows up under two token types, depending on how it was written. */
 const HTML_TOKENS = new Set(['html_block', 'html_inline'])
 
@@ -52,7 +59,7 @@ export interface StudioMarkdownOptions {
   /**
    * Which HTML blocks get annotated.
    * - `all`: plain HTML elements and Vue components (default)
-   * - `html`: only lowercase HTML elements, never components
+   * - `html`: only plain HTML elements, never components
    * - `off`: markdown blocks only
    *
    * Components receive the attribute through Vue's fallthrough attrs. That is
@@ -100,6 +107,42 @@ export function studioMarkdownSetup(md: MarkdownIt, options: StudioMarkdownOptio
     annotateTokens(tokens, annotate)
     return tokens
   }
+
+  installFenceAnnotation(md)
+}
+
+/**
+ * Code blocks need their own path.
+ *
+ * Slidev replaces markdown-it's fence rule with one that builds a string from a
+ * chain of transformers and wraps the result in `<CodeBlockWrapper>`. Nothing
+ * in that chain reads the token's attributes, so a fence can never be annotated
+ * the ordinary way. Wrapping the rule and injecting into the markup it returns
+ * is the only place the range can be attached, and it costs no extra DOM: the
+ * attribute lands on the wrapper, which passes it to the `<pre>`.
+ */
+function installFenceAnnotation(md: MarkdownIt) {
+  const original = md.renderer.rules.fence
+  if (!original)
+    return
+
+  md.renderer.rules.fence = function (this: any, tokens, idx, options, env, self) {
+    const rendered = (original as any).call(this, tokens, idx, options, env, self)
+    const map = tokens[idx]?.map
+    if (!map)
+      return rendered
+
+    const range = `${map[0]},${Math.max(map[0] + 1, map[1])}`
+    const stamp = (html: string) => html.replace(
+      /^(\s*)<([A-Za-z][\w.-]*)/,
+      `$1<$2 ${SOURCE_ATTR}="${range}" ${KIND_ATTR}="code"`,
+    )
+
+    // Slidev's fence rule is async, so the result may be a promise.
+    return rendered && typeof rendered.then === 'function'
+      ? rendered.then(stamp)
+      : stamp(rendered)
+  } as typeof md.renderer.rules.fence
 }
 
 function annotateTokens(tokens: Token[], annotate: 'all' | 'html' | 'off') {
@@ -120,37 +163,57 @@ function annotateTokens(tokens: Token[], annotate: 'all' | 'html' | 'off') {
       continue
     }
 
-    // `<Pill>Label</Pill>` alone on a line is not an HTML *block*: markdown-it
-    // emits it as a top-level `html_inline` with no paragraph around it. Slidev
-    // treats both the same way for `v-drag`, and so must this, or a component
-    // written on one line would be invisible to the editor.
+    // `<Pill>Label</Pill>` alone on a line is not an HTML *block* to
+    // markdown-it: it arrives as a top-level `html_inline` with no paragraph
+    // around it. Slidev treats both the same way for `v-drag`, and so must
+    // this, or a component written on one line would be invisible here.
     if (HTML_TOKENS.has(token.type) && annotate !== 'off')
-      token.content = injectIntoHtml(token.content, range, annotate)
+      token.content = annotateHtmlBlock(token.content, start, annotate)
   }
 }
 
 /**
- * Adds the annotation to the opening tag a chunk of raw HTML starts with.
+ * Annotates every tag in a chunk of raw HTML, each with its own line range.
  *
- * Anchored to the start on purpose. An HTML comment is also an `html_block`,
- * and prose inside one can easily look like a tag: matching the first tag
- * anywhere would rewrite `decks/<my-talk>.md` in a comment into a mangled
- * pseudo-element.
+ * A block of raw HTML is one Markdown token however much is inside it, so a
+ * grid of twelve components is a single block. Stamping only the outermost tag
+ * meant a click on any of those components resolved to the wrapper instead, and
+ * their props were unreachable.
  */
-function injectIntoHtml(html: string, range: string, annotate: 'all' | 'html') {
-  return html.replace(RE_FIRST_TAG, (full, lead: string, tag: string, attrs: string, selfClose: string) => {
-    const lower = tag.toLowerCase()
-    if (SKIPPED_TAGS.has(lower) || SKIPPED_TAGS.has(tag))
-      return full
-    if (attrs.includes(SOURCE_ATTR))
-      return full
-    const component = isComponentTag(tag)
+function annotateHtmlBlock(html: string, blockStart: number, annotate: 'all' | 'html') {
+  const tags = scanTags(html)
+  if (!tags.length)
+    return html
+
+  let result = html
+
+  // Applied back to front so earlier offsets stay valid as text is inserted.
+  for (let i = tags.length - 1; i >= 0; i--) {
+    const tag = tags[i]
+    const lower = tag.name.toLowerCase()
+    if (SKIPPED_TAGS.has(lower) || SKIPPED_TAGS.has(tag.name))
+      continue
+
+    const component = isComponentTag(tag.name)
     if (component && annotate !== 'all')
-      return full
-    const kind = component ? 'component' : 'html'
-    // `attrs` is either empty or starts with whitespace, so a tag with no
-    // attributes still needs a separator before the injected one.
-    const space = attrs.endsWith(' ') ? '' : ' '
-    return `${lead}<${tag}${attrs}${space}${SOURCE_ATTR}="${range}" ${KIND_ATTR}="${kind}" ${TAG_ATTR}="${tag}"${selfClose ? ' /' : ''}>`
-  })
+      continue
+    if (tag.attrs.includes(SOURCE_ATTR))
+      continue
+
+    const start = blockStart + tag.startLine
+    const end = blockStart + Math.max(tag.startLine + 1, tag.endLine)
+    const source = html.slice(html.lastIndexOf('<', tag.insertAt), tag.insertAt)
+
+    const attributes = [
+      ` ${SOURCE_ATTR}="${start},${end}"`,
+      ` ${KIND_ATTR}="${component ? 'component' : 'html'}"`,
+      ` ${TAG_ATTR}="${tag.name}"`,
+      ` ${SIG_ATTR}="${tagSignature(source)}"`,
+      i > 0 ? ` ${NESTED_ATTR}="1"` : '',
+    ].join('')
+
+    result = result.slice(0, tag.insertAt) + attributes + result.slice(tag.insertAt)
+  }
+
+  return result
 }

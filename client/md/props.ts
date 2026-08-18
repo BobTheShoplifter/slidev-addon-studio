@@ -1,6 +1,6 @@
 import type { PropMeta, SourceRange } from '../types'
 import { getBlock, replaceBlock } from './lines'
-import { findAttr, firstTag, writeAttr } from './tags'
+import { findAttr, opensWithTag, writeAttr } from './tags'
 
 /**
  * Reading and writing a component's props from the inspector.
@@ -13,7 +13,7 @@ import { findAttr, firstTag, writeAttr } from './tags'
 
 export function readProp(content: string, range: SourceRange, prop: PropMeta): string | boolean | null {
   const block = getBlock(content, range)
-  if (firstTag(block)?.start !== 0)
+  if (!opensWithTag(block))
     return null
 
   const attr = findAttr(block, prop.name)
@@ -29,7 +29,7 @@ export function readProp(content: string, range: SourceRange, prop: PropMeta): s
 
 export function writeProp(content: string, range: SourceRange, prop: PropMeta, value: string | boolean | null): string {
   const block = getBlock(content, range)
-  if (firstTag(block)?.start !== 0)
+  if (!opensWithTag(block))
     return content
 
   if (value === null || value === '' || value === false)

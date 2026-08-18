@@ -22,6 +22,8 @@ export interface StudioContext {
   setNote: (note: string) => Promise<void>
   /** Range of the current selection, or `null` when nothing is selected. */
   range: () => SourceRange | null
+  /** Selects a block that was just inserted, so it can be configured at once. */
+  selectInserted: (tag?: string) => Promise<void>
   go: (no: number) => void
 }
 

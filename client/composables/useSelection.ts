@@ -5,7 +5,7 @@ import { belongsToSlide, mappedElements, slideElement } from '../dom'
 import { onDomEvent } from './useDomEvent'
 import { normalise, resolveRange } from '../md/locate'
 import { readDrag } from '../md/drag'
-import { hovered, selection, studioOpen } from '../state'
+import { hovered, missed, selection, studioOpen } from '../state'
 
 /**
  * Turns a click on the rendered slide into a Markdown range Studio can edit.
@@ -47,11 +47,16 @@ export function useSelection(
     if (!studioOpen.value || event.button !== 0)
       return
     const target = targetFrom(event.target)
-    if (!target)
+    if (!target) {
+      // Inside the slide but not on anything mapped: say so rather than
+      // dropping the click without a word.
+      missed.value = event.target instanceof Element && belongsToSlide(event.target, no())
       return
+    }
     // Claim the gesture before Slidev's own `v-drag` handles or a link can.
     event.preventDefault()
     event.stopPropagation()
+    missed.value = false
     selection.value = target
   }, { capture: true })
 
@@ -114,7 +119,42 @@ export function useSelection(
     selection.value = best ? describe(best.el, no(), content()) : null
   }
 
-  return { select, targetFrom, reselect }
+  /**
+   * Selects a block that was just inserted.
+   *
+   * Insertion appends to the end of the slide, so the last matching element is
+   * the new one. For a plain Markdown block there is no tag to match on, so the
+   * last mapped element of the slide is the best available answer.
+   */
+  async function selectInserted(tag?: string) {
+    await nextTick()
+    await new Promise(resolve => setTimeout(resolve, 120))
+
+    const candidates = mappedElements(no())
+    const matching = tag ? candidates.filter(el => el.dataset.studioTag === tag) : candidates
+    const el = matching.at(-1) ?? candidates.at(-1)
+    if (el)
+      selection.value = describe(el, no(), content())
+  }
+
+  return { select, targetFrom, reselect, selectInserted }
+}
+
+/**
+ * The element's text, with a separator at every element boundary.
+ *
+ * `textContent` concatenates descendants with nothing between them, so
+ * `<h1>angripere<br>faktisk</h1>` reads as "angriperefaktisk" and a table's
+ * header row as "PakkeLengdePublikum". The Markdown side turns every tag into a
+ * space, so comparing the two would never match. Tables, headings with inline
+ * markup and many lists all failed for this one reason.
+ */
+function textOf(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE)
+    return node.textContent ?? ''
+  if (node.nodeType !== Node.ELEMENT_NODE)
+    return ''
+  return [...node.childNodes].map(textOf).join(' ')
 }
 
 /** Focus is in a text field, so the key belongs to that field, not the canvas. */
@@ -133,7 +173,8 @@ function describe(el: HTMLElement, no: number, content: string): StudioTarget {
   const signature = {
     kind,
     tag,
-    text: tag ? undefined : normalise(el.textContent ?? ''),
+    sig: el.dataset.studioSig,
+    text: tag ? undefined : normalise(textOf(el)),
   }
   const range = resolveRange(content, hint, signature)
 
@@ -144,6 +185,7 @@ function describe(el: HTMLElement, no: number, content: string): StudioTarget {
     kind,
     tag,
     positioned: range ? !!readDrag(content, range) : false,
+    nested: el.dataset.studioNested === '1',
     label: labelFor(kind, tag, el),
   }
 }
@@ -166,6 +208,7 @@ function labelFor(kind: TargetKind, tag: string | undefined, el: HTMLElement): s
     case 'quote': return 'Quote'
     case 'table': return 'Table'
     case 'rule': return 'Divider'
+    case 'code': return 'Code block'
     default: return el.tagName.toLowerCase()
   }
 }

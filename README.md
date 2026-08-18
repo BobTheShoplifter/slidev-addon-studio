@@ -47,7 +47,7 @@ Slidev's bottom bar. Studio adds nothing to the slide while it is closed.
 | **Element** | Position, size, rotation, component props, utility classes, order, duplicate, delete, and the raw Markdown of the selection |
 | **Components** | Markdown basics plus every component this deck can use, with live previews. Click to insert, drag onto the canvas to place freely |
 | **Animate** | Click steps, reveal and hide, entrance animations, staggered lists, motion presets, slide transitions |
-| **Layout** | The slide's layout, title, classes, background, zoom, click count, and presenter notes |
+| **Layout** | The layout, with a live thumbnail of each one, the frontmatter keys that layout reads, and the slide's title, classes, background, zoom, click count and notes |
 | **Slides** | Add, duplicate, delete and reorder slides |
 | **Assets** | Drop images into `public/` and insert them |
 
@@ -118,6 +118,7 @@ own `components/` directory.
 | Key | Action |
 | --- | --- |
 | <kbd>E</kbd> | Open and close Studio |
+| Drag | Move the selection. A click on its own never repositions anything |
 | <kbd>Backspace</kbd> or <kbd>Delete</kbd> | Delete the selected element |
 | <kbd>Esc</kbd> | Deselect |
 | <kbd>Ctrl</kbd> + <kbd>Z</kbd> | Undo |
@@ -151,10 +152,11 @@ something most well-documented components already have.
 **Props are read from `defineProps`.** Types drive the controls: a string union
 becomes a dropdown, a number gets bound, a boolean gets a toggle.
 
-For anything more, add an `@studio` block. It is plain YAML:
+For anything more, add a `<studio>` block to the component. It is a custom SFC
+block holding plain YAML, so editors keep highlighting the file as Vue:
 
 ```html
-<!-- @studio
+<studio lang="yaml">
 description: One of the site's mascot illustrations
 category: Brand
 props:
@@ -165,8 +167,13 @@ props:
       exclude: '*-stroke.svg'
   stroke:
     label: Light on dark
--->
+  palette:
+    control: color[]
+</studio>
 ```
+
+A `<!-- @studio ... -->` comment is still read, for components written before
+the block existed.
 
 | Key | Meaning |
 | --- | --- |
@@ -178,6 +185,18 @@ props:
 | `props.<name>.label` | Human label for the inspector |
 | `props.<name>.hidden` | Keep the prop out of the inspector |
 | `props.<name>.options` | A list of values, or `{ files, exclude }` globs |
+| `props.<name>.control` | Force a control: `text`, `number`, `boolean`, `select`, `list`, `color`, `color[]` |
+
+Controls are otherwise inferred. An array prop gets a list editor with add,
+remove and reorder; a string union gets a dropdown; a number is written bound as
+`:size="140"`. Colours are the exception: nothing about `string` says the string
+is a colour, so `control: color` or `control: color[]` is declared, and the
+inspector then shows swatches next to the values, including theme variables like
+`var(--flag-red)`.
+
+Layouts are read the same way. A layout's props are the frontmatter keys it
+understands, so a slide like `layout: fact`, whose entire visible text lives in
+`value:` and `label:`, is edited under Layout rather than on the canvas.
 
 The `files` glob is resolved against the component's own directory, so a
 component that ships a folder of assets can offer them as choices with nothing
@@ -240,8 +259,13 @@ worth being dull about.
 - The first slide of the entry file cannot be deleted or moved: its frontmatter
   is the deck's global configuration.
 - Prop extraction understands `defineProps` and the Options API. Anything more
-  exotic simply shows no props; the component still works, and an `@studio`
+  exotic simply shows no props; the component still works, and a `<studio>`
   block can describe the props by hand.
+- A list editor is offered for arrays of strings. An array of objects, such as
+  a carousel's items, is left as a text field rather than guessed at.
+- An element nested inside a block of raw HTML can be selected, styled, animated
+  and deleted, but not reordered or duplicated on its own: it shares a Markdown
+  block with its siblings.
 - A usage example that abbreviates, such as `:items="[{ … }, …]"`, is still
   inserted as the snippet but cannot be previewed, since it is not valid
   JavaScript. Add `preview:` to the `@studio` block to give the palette

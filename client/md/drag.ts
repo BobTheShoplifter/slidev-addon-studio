@@ -1,6 +1,6 @@
 import type { DragPos, SourceRange } from '../types'
 import { getBlock, replaceBlock, toLines, unwrap } from './lines'
-import { findAttr, firstTag, writeAttr } from './tags'
+import { findAttr, opensWithTag, writeAttr } from './tags'
 
 /**
  * Free positioning, i.e. Slidev's `v-drag`.
@@ -54,7 +54,7 @@ export interface DragInfo {
 
 export function readDrag(content: string, range: SourceRange): DragInfo | null {
   const block = getBlock(content, range)
-  if (firstTag(block)?.start === 0) {
+  if (opensWithTag(block)) {
     const attr = findAttr(block, 'v-drag')
     if (attr)
       return { pos: parsePos(attr.value), via: 'attr' }
@@ -102,7 +102,7 @@ export function writeDrag(content: string, range: SourceRange, pos: DragPos): st
   }
 
   const block = getBlock(content, range)
-  if (firstTag(block)?.start === 0)
+  if (opensWithTag(block))
     return replaceBlock(content, range, writeAttr(block, 'v-drag', formatPos(pos, 'attr')))
 
   return replaceBlock(content, range, `<v-drag pos="${formatPos(pos, 'prop')}">\n\n${block}\n\n</v-drag>`)

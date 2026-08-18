@@ -1,16 +1,3 @@
-<!-- @studio
-description: A shape from the deck's own asset folder
-category: Playground
-props:
-  name:
-    label: Shape
-    options:
-      files: ./shapes/*.svg
-  size:
-    label: Size (px)
-  caption:
-    label: Caption
--->
 <script setup lang="ts">
 import { computed } from 'vue'
 /**
@@ -49,3 +36,17 @@ figcaption {
   opacity: 0.7;
 }
 </style>
+
+<studio lang="yaml">
+description: A shape from the deck's own asset folder
+category: Playground
+props:
+  name:
+    label: Shape
+    options:
+      files: ./shapes/*.svg
+  size:
+    label: Size (px)
+  caption:
+    label: Caption
+</studio>

@@ -1,6 +1,6 @@
 import type { SourceRange } from '../types'
 import { getBlock, replaceBlock } from './lines'
-import { findAttr, firstTag, writeAttr } from './tags'
+import { findAttr, opensWithTag, writeAttr } from './tags'
 
 /**
  * Motion presets on top of `@vueuse/motion`, which Slidev registers as
@@ -30,7 +30,7 @@ export const MOTION_PRESETS: MotionPreset[] = [
 
 export function readMotion(content: string, range: SourceRange): string | null {
   const block = getBlock(content, range)
-  if (firstTag(block)?.start !== 0)
+  if (!opensWithTag(block))
     return null
   const initial = findAttr(block, 'initial')
   if (!initial?.value)
@@ -41,7 +41,7 @@ export function readMotion(content: string, range: SourceRange): string | null {
 
 export function writeMotion(content: string, range: SourceRange, presetId: string | null, delay = 0): string {
   const block = getBlock(content, range)
-  if (firstTag(block)?.start !== 0)
+  if (!opensWithTag(block))
     return content
 
   if (!presetId) {

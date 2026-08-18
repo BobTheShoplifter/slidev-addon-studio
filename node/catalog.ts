@@ -4,7 +4,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { basename, extname, join, relative, resolve, sep } from 'node:path'
 import { parseStudioBlock, parseUsageExample, resolveOptions } from './metadata'
 
-export type { PropMeta, PropOption } from './metadata'
+export type { PropControl, PropMeta, PropOption } from './metadata'
 
 export type ComponentSource = 'builtin' | 'theme' | 'addon' | 'project'
 
@@ -30,6 +30,13 @@ export interface LayoutEntry {
   source: ComponentSource
   origin: string
   description?: string
+  /**
+   * A layout's props are supplied by the slide's frontmatter, so these are the
+   * frontmatter keys that layout understands. For a slide like `layout: fact`,
+   * whose whole text lives in `value` and `label`, this is the only way to edit
+   * it: nothing on screen came through Markdown.
+   */
+  props: PropMeta[]
 }
 
 export interface Catalog {
@@ -113,11 +120,15 @@ export async function buildCatalog(options: ResolvedSlidevOptions): Promise<Cata
   for (const [name, file] of Object.entries(layoutPaths)) {
     const { source, origin } = classify(file, options)
     let description: string | undefined
+    let props: PropMeta[] = []
     try {
-      description = parseStudioBlock(await readFile(file, 'utf-8')).description
+      const code = await readFile(file, 'utf-8')
+      const meta = parseStudioBlock(code)
+      description = meta.description
+      props = await describeProps(code, file, meta)
     }
     catch {}
-    layouts.push({ name, file, source, origin, description })
+    layouts.push({ name, file, source, origin, description, props })
   }
 
   components.sort((a, b) => a.name.localeCompare(b.name))
@@ -231,6 +242,7 @@ async function describeProps(code: string, file: string, meta: ReturnType<typeof
       continue
     prop.label = declared.label
     prop.hidden = declared.hidden
+    prop.control = declared.control
     const options = await resolveOptions(declared.options, file)
     if (options)
       prop.options = options
@@ -245,6 +257,7 @@ async function describeProps(code: string, file: string, meta: ReturnType<typeof
       name,
       label: declared.label,
       hidden: declared.hidden,
+      control: declared.control,
       options: await resolveOptions(declared.options, file),
     })
   }

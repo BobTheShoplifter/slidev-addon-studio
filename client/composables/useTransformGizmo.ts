@@ -10,6 +10,16 @@ import { snapBox } from './useSnapping'
 
 export type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
+/**
+ * How far the pointer must travel, in screen pixels, before a press counts as a
+ * gesture. Below this nothing is painted and nothing is written: a click is a
+ * click, and giving a block a fixed position is a decision, not a twitch.
+ */
+const DRAG_THRESHOLD = 4
+
+/** How much of an element must stay on the canvas, in canvas units. */
+const MIN_ON_CANVAS = 24
+
 type Gesture =
   | { type: 'move' }
   | { type: 'resize', handle: ResizeHandle }
@@ -32,6 +42,8 @@ export function useTransformGizmo(context: {
 }) {
   const { canvas } = context
 
+  /** A gesture is armed on pointerdown but only becomes active once it moves. */
+  const armed = ref(false)
   const active = ref(false)
   const guides = shallowRef<Guide[]>([])
   const preview = shallowRef<Box | null>(null)
@@ -39,6 +51,7 @@ export function useTransformGizmo(context: {
   let gesture: Gesture | null = null
   let target: StudioTarget | null = null
   let startBox: Box = { x: 0, y: 0, w: 0, h: 0 }
+  let hadPosition = false
   let startRotate = 0
   let autoHeight = true
   let pointerStart = { x: 0, y: 0 }
@@ -56,9 +69,10 @@ export function useTransformGizmo(context: {
 
     target = current
     gesture = next
-    active.value = true
+    armed.value = true
 
     const existing = readDrag(context.getContent(), current.range)
+    hadPosition = !!existing
     startBox = canvas.boxOf(current.el)
     startRotate = existing?.pos?.rotate ?? 0
     autoHeight = existing?.pos ? existing.pos.h === null : true
@@ -66,19 +80,33 @@ export function useTransformGizmo(context: {
     preview.value = { ...startBox }
 
     others = collectOthers(current.el, current.no)
-
     painted = current.el
     restore = painted.getAttribute('style') ?? ''
-    if (!existing) {
-      // A block joining the canvas needs to leave the flow before it can move.
+  }
+
+  /**
+   * Detaching the element from the flow is deferred until the gesture is real.
+   * Doing it on pointerdown made a plain click visibly shift the slide, because
+   * the element left its parent's centring before anyone had asked for it.
+   */
+  function begin() {
+    active.value = true
+    if (painted && !hadPosition) {
       painted.style.position = 'absolute'
       painted.style.margin = '0'
     }
   }
 
   onDomEvent<PointerEvent>(window, 'pointermove', (event) => {
-    if (!active.value || !gesture || !target)
+    if (!armed.value || !gesture || !target)
       return
+
+    if (!active.value) {
+      const travelled = Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y)
+      if (travelled < DRAG_THRESHOLD)
+        return
+      begin()
+    }
 
     const dx = (event.clientX - pointerStart.x) / canvas.scale.value
     const dy = (event.clientY - pointerStart.y) / canvas.scale.value
@@ -124,16 +152,34 @@ export function useTransformGizmo(context: {
       guides.value = []
     }
 
-    preview.value = box
-    paint(box, startRotate)
+    preview.value = clampToCanvas(box)
+    paint(preview.value, startRotate)
   })
 
   onDomEvent(window, 'pointerup', async () => {
-    if (!active.value || !target?.range)
+    if (!armed.value)
       return
+
+    // A press that never moved is a click. Nothing was painted and nothing is
+    // written, so selecting an element cannot silently reposition it.
+    if (!active.value) {
+      armed.value = false
+      gesture = null
+      preview.value = null
+      target = null
+      painted = null
+      return
+    }
+
+    if (!target?.range) {
+      armed.value = false
+      active.value = false
+      return
+    }
 
     const box = preview.value ?? startBox
     const wasResize = gesture?.type === 'resize'
+    armed.value = false
     active.value = false
     guides.value = []
     gesture = null
@@ -162,6 +208,21 @@ export function useTransformGizmo(context: {
     target = null
   })
 
+  /**
+   * Keeps a sliver of the element on the canvas. An element dropped entirely
+   * outside is invisible and, because the slide clips its overflow, impossible
+   * to click and drag back: only undo or hand-editing would recover it.
+   */
+  function clampToCanvas(box: Box): Box {
+    const width = canvas.slideWidth.value
+    const height = canvas.slideHeight.value
+    return {
+      ...box,
+      x: Math.min(Math.max(box.x, MIN_ON_CANVAS - box.w), width - MIN_ON_CANVAS),
+      y: Math.min(Math.max(box.y, MIN_ON_CANVAS - box.h), height - MIN_ON_CANVAS),
+    }
+  }
+
   function paint(box: Box, rotate: number) {
     if (!painted)
       return
@@ -182,6 +243,7 @@ export function useTransformGizmo(context: {
 
   return {
     active,
+    armed,
     guides,
     preview,
     startMove: (event: PointerEvent) => start(event, { type: 'move' }),

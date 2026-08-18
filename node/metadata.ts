@@ -21,6 +21,14 @@ export interface PropOption {
   preview?: string
 }
 
+/**
+ * The control the inspector should use.
+ *
+ * Most are inferred from the prop's type. `color` and `color[]` are not, since
+ * nothing in `string` says the string is a colour, so an author declares those.
+ */
+export type PropControl = 'text' | 'number' | 'boolean' | 'select' | 'list' | 'color' | 'color[]'
+
 export interface PropMeta {
   name: string
   type?: string
@@ -28,6 +36,7 @@ export interface PropMeta {
   default?: string
   /** Human label for the inspector; defaults to the prop name. */
   label?: string
+  control?: PropControl
   options?: PropOption[]
   /** Write as `:prop="…"` rather than `prop="…"`. */
   bind?: boolean
@@ -47,19 +56,26 @@ export interface StudioMeta {
 interface RawPropMeta {
   label?: string
   hidden?: boolean
+  control?: PropControl
   /** A list of values, or a description of where to find them. */
   options?: string[] | { files: string, exclude?: string }
 }
 
-const RE_STUDIO_BLOCK = /<!--\s*@studio\s*\n([\s\S]*?)-->/
+/**
+ * The preferred form: a custom SFC block, which Vue's tooling understands and
+ * ignores. An HTML comment before the `<script>` block makes some editors treat
+ * the whole file as a template and lose syntax highlighting, so that form is
+ * still read but no longer the one to recommend.
+ */
+const RE_STUDIO_SFC_BLOCK = /<studio\b[^>]*>([\s\S]*?)<\/studio>/
+const RE_STUDIO_COMMENT_BLOCK = /<!--\s*@studio\s*\n([\s\S]*?)-->/
 
 /**
- * Reads the optional `@studio` block. It is YAML so component authors can
- * describe nested things such as per-prop options without learning a bespoke
- * format:
+ * Reads the optional Studio block. It is YAML so component authors can describe
+ * nested things such as per-prop options without learning a bespoke format:
  *
  * ```html
- * <!-- @studio
+ * <studio lang="yaml">
  * description: One of the site's mascots
  * props:
  *   name:
@@ -67,18 +83,18 @@ const RE_STUDIO_BLOCK = /<!--\s*@studio\s*\n([\s\S]*?)-->/
  *     options:
  *       files: ../assets/mascots/*.svg
  *       exclude: '*-stroke.svg'
- * -->
+ * </studio>
  * ```
  */
 export function parseStudioBlock(code: string): StudioMeta {
-  const match = code.match(RE_STUDIO_BLOCK)
+  const match = code.match(RE_STUDIO_SFC_BLOCK) ?? code.match(RE_STUDIO_COMMENT_BLOCK)
   if (!match)
     return {}
   try {
     return (YAML.parse(match[1]) ?? {}) as StudioMeta
   }
   catch (error: any) {
-    console.warn(`[slidev-studio] Could not read an @studio block: ${error?.message ?? error}`)
+    console.warn(`[slidev-studio] Could not read a <studio> block: ${error?.message ?? error}`)
     return {}
   }
 }

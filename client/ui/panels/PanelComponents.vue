@@ -9,7 +9,7 @@ import { BASIC_BLOCKS } from '../../blocks'
 import { useCatalog } from '../../composables/useCatalog'
 import { useStudio } from '../../context'
 import { insertSnippet, positioned } from '../../md/insert'
-import { selection } from '../../state'
+import { activePanel, selection } from '../../state'
 import ComponentPreview from '../parts/ComponentPreview.vue'
 
 /**
@@ -45,6 +45,10 @@ async function insert(item: { name: string, snippet: string }) {
     insertSnippet(studio.content(), item.snippet, range ? { mode: 'after', range } : { mode: 'append' }),
     `Insert ${item.name}`,
   )
+  // Something just added is the thing you want to configure, so hand over to
+  // the Element panel with it already selected.
+  await studio.selectInserted(item.name)
+  activePanel.value = 'inspect'
 }
 
 onDomEvent<DragEvent>(window, 'dragover', (event) => {

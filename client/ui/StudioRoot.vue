@@ -58,6 +58,7 @@ const context: StudioContext = {
   setFrontmatter: (values, label) => source.setFrontmatter(values, label),
   setNote: note => source.setNote(note),
   range: () => selection.value?.range ?? null,
+  selectInserted: tag => selectionApi.selectInserted(tag),
   go: target => nav.go(target),
 }
 

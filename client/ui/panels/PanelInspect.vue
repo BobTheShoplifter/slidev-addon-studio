@@ -7,7 +7,7 @@ import { readProp, writeProp } from '../../md/props'
 import { parsePos, readDrag, removeDrag, writeDrag } from '../../md/drag'
 import { getBlock, moveBlock, removeBlock, insertAfter, replaceBlock } from '../../md/lines'
 import { readClasses, writeClasses } from '../../md/classes'
-import { selection } from '../../state'
+import { missed, selection } from '../../state'
 import PropField from '../parts/PropField.vue'
 import StudioField from '../parts/StudioField.vue'
 import StudioIcon from '../parts/StudioIcon.vue'
@@ -115,7 +115,16 @@ async function remove() {
 
 <template>
   <div v-if="!selection" class="studio-empty">
-    Click anything on the slide to select it.
+    <template v-if="missed">
+      <p>That part of the slide does not come from the Markdown.</p>
+      <p class="studio-hint">
+        It is drawn by the layout, so it is edited under Layout rather than on
+        the canvas. Everything written in the slide body can be clicked.
+      </p>
+    </template>
+    <template v-else>
+      Click anything on the slide to select it.
+    </template>
   </div>
 
   <div v-else-if="!range" class="studio-empty">
@@ -211,19 +220,23 @@ async function remove() {
         Arrange
       </h3>
       <div class="studio-button-row">
-        <button class="studio-button" title="Move earlier" @click="move(-1)">
+        <button class="studio-button" title="Move earlier" :disabled="selection.nested" @click="move(-1)">
           <StudioIcon name="up" :size="14" />
         </button>
-        <button class="studio-button" title="Move later" @click="move(1)">
+        <button class="studio-button" title="Move later" :disabled="selection.nested" @click="move(1)">
           <StudioIcon name="down" :size="14" />
         </button>
-        <button class="studio-button" title="Duplicate" @click="duplicate">
+        <button class="studio-button" title="Duplicate" :disabled="selection.nested" @click="duplicate">
           <StudioIcon name="copy" :size="14" />
         </button>
         <button class="studio-button studio-button--danger" title="Delete" @click="remove">
           <StudioIcon name="trash" :size="14" />
         </button>
       </div>
+      <p v-if="selection.nested" class="studio-hint">
+        This element shares a block with its neighbours, so it can be edited and
+        deleted but not reordered on its own.
+      </p>
     </section>
 
     <section class="studio-section">

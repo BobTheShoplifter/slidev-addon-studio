@@ -1,6 +1,6 @@
 import type { SourceRange } from '../types'
 import { getBlock, replaceBlock } from './lines'
-import { findAttr, firstTag, writeAttr } from './tags'
+import { findAttr, opensWithTag, writeAttr } from './tags'
 
 /**
  * Utility classes on a block.
@@ -13,13 +13,13 @@ import { findAttr, firstTag, writeAttr } from './tags'
 const RE_MDC_ATTRS = /\{([^{}]*)\}\s*$/
 
 export function canStyle(content: string, range: SourceRange, mdcEnabled: boolean): boolean {
-  return !!firstTag(getBlock(content, range))?.start === true || mdcEnabled
+  return !!opensWithTag(getBlock(content, range)) || mdcEnabled
 }
 
 export function readClasses(content: string, range: SourceRange): string {
   const block = getBlock(content, range)
 
-  if (firstTag(block)?.start === 0)
+  if (opensWithTag(block))
     return findAttr(block, 'class')?.value ?? ''
 
   const attrs = block.match(RE_MDC_ATTRS)?.[1] ?? ''
@@ -34,7 +34,7 @@ export function writeClasses(content: string, range: SourceRange, classes: strin
   const block = getBlock(content, range)
   const list = classes.trim().split(/\s+/).filter(Boolean)
 
-  if (firstTag(block)?.start === 0)
+  if (opensWithTag(block))
     return replaceBlock(content, range, writeAttr(block, 'class', list.length ? list.join(' ') : null))
 
   const lines = block.split('\n')

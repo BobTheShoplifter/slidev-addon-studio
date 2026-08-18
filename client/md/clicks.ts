@@ -1,6 +1,6 @@
 import type { SourceRange } from '../types'
 import { getBlock, replaceBlock, toLines, unwrap } from './lines'
-import { findAttr, firstTag, writeAttr } from './tags'
+import { findAttr, opensWithTag, writeAttr } from './tags'
 
 /**
  * Click animations, read from and written back to Markdown.
@@ -88,9 +88,8 @@ export function findWrapper(content: string, range: SourceRange): Wrapper | null
 
 export function readClicks(content: string, range: SourceRange): ClickState {
   const block = getBlock(content, range)
-  const tag = firstTag(block)
 
-  if (tag && tag.start === 0) {
+  if (opensWithTag(block)) {
     const click = findAttr(block, 'v-click')
     if (click) {
       return {
@@ -141,8 +140,7 @@ export function writeClicks(
     return cleared.content
 
   const block = getBlock(cleared.content, cleared.range)
-  const tag = firstTag(block)
-  const canUseAttr = !!tag && tag.start === 0 && !next.stagger && (options.preferAttr ?? true)
+  const canUseAttr = !!opensWithTag(block) && !next.stagger && (options.preferAttr ?? true)
 
   if (canUseAttr) {
     const modifiers = [
@@ -188,7 +186,7 @@ export function clearClicksAt(content: string, range: SourceRange): { content: s
 
   const shifted: SourceRange = [range[0] - shift, range[1] - shift]
   const block = getBlock(result, shifted)
-  if (firstTag(block)?.start === 0 && findAttr(block, 'v-click'))
+  if (opensWithTag(block) && findAttr(block, 'v-click'))
     result = replaceBlock(result, shifted, writeAttr(block, 'v-click', null))
 
   return { content: result, range: shifted }

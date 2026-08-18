@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { clearClicks, findWrapper, readClicks, writeClicks } from '../client/md/clicks'
 import { readClasses, writeClasses } from '../client/md/classes'
 import { formatPos, parsePos, readDrag, removeDrag, writeDrag } from '../client/md/drag'
+import { formatStringArray, isArrayType, isColorValue, parseStringArray } from '../client/md/literals'
 import { getBlock, insertAfter, moveBlock, removeBlock, replaceBlock, unwrap } from '../client/md/lines'
 import { resolveRange } from '../client/md/locate'
 import { findAttr, firstTag, writeAttr } from '../client/md/tags'
@@ -220,5 +221,73 @@ describe('locate', () => {
   it('keeps a fenced code block whole', () => {
     const source = ['# Title', '', '```ts', '', 'const a = 1', '```', '', 'after'].join('\n')
     expect(resolveRange(source, null, { kind: 'heading', text: 'title' })).toEqual([0, 1])
+  })
+})
+
+describe('array literals', () => {
+  it('reads a list of quoted strings, however it is spelled', () => {
+    expect(parseStringArray("['a', 'b']")).toEqual(['a', 'b'])
+    expect(parseStringArray('[ "a" , "b" , ]')).toEqual(['a', 'b'])
+    expect(parseStringArray("[\n  'Ja, minst én gang',\n  'Nei, aldri',\n]")).toEqual(['Ja, minst én gang', 'Nei, aldri'])
+    expect(parseStringArray(String.raw`['it\'s fine']`)).toEqual(["it's fine"])
+  })
+
+  it('reports anything richer as unparsed rather than mangling it', () => {
+    expect(parseStringArray("[{ src: '/a.png' }]")).toBeNull()
+    expect(parseStringArray('[1, 2]')).toBeNull()
+    expect(parseStringArray('not an array')).toBeNull()
+    expect(parseStringArray(null)).toBeNull()
+  })
+
+  it('writes short lists inline and long ones one per line', () => {
+    expect(formatStringArray([])).toBe('[]')
+    expect(formatStringArray(['a', 'b'])).toBe("['a', 'b']")
+    expect(formatStringArray(['a', 'b', 'c'])).toBe("[\n  'a',\n  'b',\n  'c',\n]")
+  })
+
+  it('round trips a list through both directions', () => {
+    const items = ['Ja, minst én gang', 'Nei, aldri', 'Vet ikke / usikker']
+    expect(parseStringArray(formatStringArray(items))).toEqual(items)
+  })
+
+  it('escapes a quote rather than breaking the attribute', () => {
+    expect(parseStringArray(formatStringArray(["it's"]))).toEqual(["it's"])
+  })
+
+  it('knows an array type and a colour value when it sees one', () => {
+    expect(isArrayType('string[]')).toBe(true)
+    expect(isArrayType('{…}[]')).toBe(true)
+    expect(isArrayType('string')).toBe(false)
+    expect(isColorValue('#4f8cff')).toBe(true)
+    expect(isColorValue('var(--flag-red)')).toBe(true)
+    expect(isColorValue('rgb(1 2 3)')).toBe(true)
+    expect(isColorValue('Enheter')).toBe(false)
+  })
+})
+
+describe('locate, against text as the DOM reports it', () => {
+  // The client joins an element's text nodes with a space at every element
+  // boundary, precisely so these cases work. These signatures are what that
+  // produces for real slides in the wild.
+  it('matches a table whose cells are separate elements', () => {
+    const source = [
+      '## Priser og pakker',
+      '',
+      '| Pakke | Lengde | Publikum | Pris |',
+      '| --- | --- | --- | --- |',
+      '| Sikkerhet på jobb | 40 min | Alle ansatte | Fra 15 000 |',
+    ].join('\n')
+
+    expect(resolveRange(source, [2, 5], { kind: 'table', text: 'pakke lengde publikum pris' })).toEqual([2, 5])
+  })
+
+  it('matches a heading broken by inline markup', () => {
+    const source = '# Hvordan angripere<br>faktisk jobber'
+    expect(resolveRange(source, [0, 1], { kind: 'heading', text: 'hvordan angripere faktisk jobber' })).toEqual([0, 1])
+  })
+
+  it('matches a list whose items are separate elements', () => {
+    const source = ['- Gjenbrukte passord', '- Manglende totrinns'].join('\n')
+    expect(resolveRange(source, [0, 2], { kind: 'list', text: 'gjenbrukte passord manglende totrinns' })).toEqual([0, 2])
   })
 })

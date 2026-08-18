@@ -8,6 +8,7 @@ import { applyDeckAction } from './deck'
 const VIRTUAL_CATALOG = 'virtual:slidev-studio/catalog'
 const RESOLVED_CATALOG = `\0${VIRTUAL_CATALOG}`
 const API_PREFIX = '/@studio/'
+const STUDIO_BLOCK_REQUEST = /[?&]vue&type=studio\b/
 
 /**
  * The node half of Studio.
@@ -30,6 +31,9 @@ export function studioPlugin(options: ResolvedSlidevOptions): Plugin {
 
   return {
     name: 'slidev-studio',
+    // Ahead of the Vue plugin, so the `<studio>` block below is claimed before
+    // it is handed on as JavaScript.
+    enforce: 'pre',
 
     resolveId(id) {
       if (id === VIRTUAL_CATALOG)
@@ -38,6 +42,13 @@ export function studioPlugin(options: ResolvedSlidevOptions): Plugin {
     },
 
     async load(id) {
+      // A component's metadata lives in a `<studio>` block, which keeps an SFC
+      // looking like an SFC to editors. Vue emits an import for every custom
+      // block it does not recognise and expects a plugin to answer it; without
+      // this the YAML would reach the browser as source and fail to parse.
+      if (STUDIO_BLOCK_REQUEST.test(id))
+        return 'export default {}'
+
       if (id !== RESOLVED_CATALOG)
         return null
       if (!isDev)

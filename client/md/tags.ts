@@ -18,6 +18,21 @@ export interface TagInfo {
 
 const RE_OPEN_TAG = /<([A-Za-z][\w.-]*)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>/
 
+/**
+ * Whether the block *is* an element, rather than merely containing one.
+ *
+ * A block nested inside a raw HTML block is indented, so "the tag starts at
+ * index 0" is the wrong test: it silently sends every nested component down the
+ * Markdown-wrapper path, which splices blank lines into the parent block and
+ * breaks it. Leading whitespace is the only thing allowed in front.
+ */
+export function opensWithTag(block: string): TagInfo | null {
+  const tag = firstTag(block)
+  if (!tag)
+    return null
+  return block.slice(0, tag.start).trim() === '' ? tag : null
+}
+
 export function firstTag(block: string): TagInfo | null {
   const match = block.match(RE_OPEN_TAG)
   if (!match || match.index === undefined)

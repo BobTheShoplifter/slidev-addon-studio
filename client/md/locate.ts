@@ -1,4 +1,5 @@
 import type { SourceRange, TargetKind } from '../types'
+import { tagSignature } from '../../shared/signature'
 import { toLines } from './lines'
 
 /**
@@ -17,6 +18,12 @@ export interface Signature {
   kind: TargetKind
   /** Tag name for html/component blocks. */
   tag?: string
+  /**
+   * Fingerprint of the opening tag as written. Twelve identical `<Mascot />`
+   * elements share a name, so the name alone would let a stale hint confirm
+   * against the wrong one.
+   */
+  sig?: string
   /** Normalised leading text for prose blocks. */
   text?: string
 }
@@ -79,9 +86,17 @@ function matches(block: string, signature: Signature) {
     return false
 
   if (signature.tag) {
-    const tag = block.trim().match(/^<([A-Za-z][\w.-]*)/)?.[1]
-    return !!tag && tag.toLowerCase() === signature.tag.toLowerCase()
+    const opening = block.trim().match(/^<[A-Za-z][\w.-]*(?:"[^"]*"|'[^']*'|[^>"'])*/)?.[0]
+    if (!opening)
+      return false
+    const tag = opening.match(/^<([A-Za-z][\w.-]*)/)![1]
+    if (tag.toLowerCase() !== signature.tag.toLowerCase())
+      return false
+    return signature.sig ? tagSignature(opening) === signature.sig : true
   }
+
+  if (signature.kind === 'code')
+    return /^\s*(?:`{3,}|~{3,})/.test(block)
 
   if (signature.kind === 'heading' && !/^#{1,6}\s/.test(block.trim()))
     return false

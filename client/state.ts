@@ -17,6 +17,13 @@ export const gridSize = useLocalStorage('slidev-studio:grid-size', 20)
 export const outlineEnabled = useLocalStorage('slidev-studio:outlines', false)
 
 export const selection = shallowRef<StudioTarget | null>(null)
+/**
+ * The last click landed on the slide but on nothing the editor can trace.
+ * Without this the click is simply dropped and the panel keeps saying "click
+ * anything", which reads as the editor being broken rather than as that
+ * particular thing not being editable.
+ */
+export const missed = shallowRef(false)
 export const hovered = shallowRef<StudioTarget | null>(null)
 
 /** A write is in flight; the UI blocks further edits until it lands. */
