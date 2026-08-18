@@ -18,6 +18,33 @@ import { slideHeight, slideWidth } from '@slidev/client/env.ts'
  */
 const props = defineProps<{ layout: CatalogLayout, frontmatter: Record<string, any> }>()
 
+/**
+ * The slide's frontmatter drives the preview, but a layout it does not use will
+ * be missing props it requires: `iframe-left` wants a `url` no `layout: demo`
+ * slide has. Stand-ins keep the thumbnail honest without filling the console
+ * with prop warnings.
+ */
+const previewProps = computed(() => {
+  const values: Record<string, any> = { ...props.frontmatter }
+  for (const prop of props.layout.props ?? []) {
+    if (!prop.required || values[prop.name] !== undefined)
+      continue
+    values[prop.name] = stub(prop.type)
+  }
+  return values
+})
+
+function stub(type: string | undefined) {
+  const kind = (type ?? 'string').toLowerCase()
+  if (kind.includes('[]') || kind.startsWith('array'))
+    return []
+  if (kind.includes('number') && !kind.includes('string'))
+    return 0
+  if (kind.includes('boolean'))
+    return false
+  return ''
+}
+
 /** Thumbnails are a fixed width, so the scale is a constant rather than a measurement. */
 const THUMBNAIL_WIDTH = 140
 
@@ -52,7 +79,7 @@ onErrorCaptured(() => {
 <template>
   <div class="studio-layout-preview" :style="boxStyle">
     <div v-if="loaded && !failed" class="studio-layout-preview__stage" :style="stageStyle">
-      <component :is="loaded" v-bind="frontmatter">
+      <component :is="loaded" v-bind="previewProps">
         <h1>Slide title</h1>
         <p>Body text sits here, so the shape of the layout is visible.</p>
       </component>

@@ -9,6 +9,7 @@ import { useSlideSource } from '../composables/useSlideSource'
 import { useTransformGizmo } from '../composables/useTransformGizmo'
 import { studioKey } from '../context'
 import { dockWidth, lastError, selection, studioOpen } from '../state'
+import InlineEditor from './InlineEditor.vue'
 import SelectionLayer from './SelectionLayer.vue'
 import StudioDock from './StudioDock.vue'
 import StudioToolbar from './StudioToolbar.vue'
@@ -107,6 +108,7 @@ watchEffect(() => {
       <StudioToolbar />
       <template v-if="studioOpen">
         <SelectionLayer />
+        <InlineEditor />
         <StudioDock />
       </template>
       <div v-if="lastError" class="studio-toast">

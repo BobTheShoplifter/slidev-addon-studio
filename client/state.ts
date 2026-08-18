@@ -24,6 +24,9 @@ export const selection = shallowRef<StudioTarget | null>(null)
  * particular thing not being editable.
  */
 export const missed = shallowRef(false)
+
+/** The selection's text is being edited in place. */
+export const editing = ref(false)
 export const hovered = shallowRef<StudioTarget | null>(null)
 
 /** A write is in flight; the UI blocks further edits until it lands. */
@@ -45,4 +48,4 @@ export function clearSelection() {
 // A single place to look when something in the editor is not behaving: the
 // live state is on `window.__studio__` while the dev server is running.
 if (typeof window !== 'undefined')
-  (window as any).__studio__ = { studioOpen, activePanel, selection, hovered, busy, lastError }
+  (window as any).__studio__ = { studioOpen, activePanel, selection, hovered, busy, lastError, editing, missed }

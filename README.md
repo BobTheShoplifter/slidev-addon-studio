@@ -48,7 +48,7 @@ Slidev's bottom bar. Studio adds nothing to the slide while it is closed.
 | **Components** | Markdown basics plus every component this deck can use, with live previews. Click to insert, drag onto the canvas to place freely |
 | **Animate** | Click steps, reveal and hide, entrance animations, staggered lists, motion presets, slide transitions |
 | **Layout** | The layout, with a live thumbnail of each one, the frontmatter keys that layout reads, and the slide's title, classes, background, zoom, click count and notes |
-| **Slides** | Add, duplicate, delete and reorder slides |
+| **Slides** | Live thumbnails, drag to reorder, add, duplicate and delete |
 | **Assets** | Drop images into `public/` and insert them |
 
 ### Selecting and moving
@@ -65,6 +65,21 @@ the free positioning.
 Elements snap to the canvas edges, its centre and thirds, and to the edges and
 centres of everything else on the slide. Hold <kbd>Alt</kbd> to place something
 exactly where you want it instead.
+
+### Editing text
+
+Double-click any block and it becomes editable where it sits, with a toolbar for
+bold, italic, code, strikethrough, links, headings, lists and quotes.
+
+What is edited is the block's Markdown, not its rendered HTML, which is why a
+table or a fenced code block is editable too: to this editor they are text like
+everything else. It is also why the toolbar can be trusted. Round-tripping
+rendered HTML back into Markdown is where visual editors lose components,
+directives and formatting, and a Slidev deck is full of all three.
+
+<kbd>Ctrl</kbd> + <kbd>Enter</kbd> applies, <kbd>Esc</kbd> cancels,
+<kbd>Ctrl</kbd> + <kbd>B</kbd> and <kbd>Ctrl</kbd> + <kbd>I</kbd> do what you
+expect.
 
 ### Editing props
 
@@ -118,6 +133,7 @@ own `components/` directory.
 | Key | Action |
 | --- | --- |
 | <kbd>E</kbd> | Open and close Studio |
+| Double click | Edit the text of a block in place |
 | Drag | Move the selection. A click on its own never repositions anything |
 | <kbd>Backspace</kbd> or <kbd>Delete</kbd> | Delete the selected element |
 | <kbd>Esc</kbd> | Deselect |

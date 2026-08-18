@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { PropControl, PropMeta } from '../../types'
 import { computed } from 'vue'
-import { formatStringArray, isArrayType, parseStringArray } from '../../md/literals'
+import { formatStringArray, isArrayType, isColorValue, parseStringArray } from '../../md/literals'
 import { isBoolean, isNumber } from '../../md/props'
 import ColorSwatch from './ColorSwatch.vue'
 import ListField from './ListField.vue'
@@ -22,7 +22,30 @@ const label = computed(() => props.prop.label ?? props.prop.name)
 const current = computed(() => (props.value === null ? '' : String(props.value)))
 const optionValues = computed(() => props.prop.options?.map(o => o.value) ?? [])
 
-const items = computed(() => parseStringArray(current.value))
+const items = computed(() => parseStringArray(current.value) ?? defaultItems.value)
+
+/**
+ * A prop with no value written yet still has a default, and for a list that
+ * default is usually the interesting thing: `colors` on a poll defaults to the
+ * theme's palette. Showing it means the first edit starts from what is actually
+ * on screen rather than from nothing.
+ */
+const defaultItems = computed(() => {
+  if (current.value || !props.prop.default)
+    return null
+  const literal = props.prop.default.match(/\[[\s\S]*\]/)?.[0]
+  return literal ? parseStringArray(literal) : null
+})
+
+/**
+ * Colours are not inferable from a type, but they are perfectly inferable from
+ * a value: nothing else looks like `var(--flag-red)` or `#4f8cff`. Declaring
+ * `control: color` stays available for an empty prop.
+ */
+const looksLikeColors = computed(() => {
+  const list = items.value
+  return !!list?.length && list.every(isColorValue)
+})
 
 const control = computed<PropControl>(() => {
   const declared = props.prop.control
@@ -32,7 +55,9 @@ const control = computed<PropControl>(() => {
     return 'select'
   if (isArrayType(props.prop.type))
     // Only offer rows for a list we could actually read back.
-    return items.value ? 'list' : 'text'
+    return items.value ? (looksLikeColors.value ? 'color[]' : 'list') : 'text'
+  if (current.value && isColorValue(current.value))
+    return 'color'
   if (isBoolean(props.prop))
     return 'boolean'
   if (isNumber(props.prop))

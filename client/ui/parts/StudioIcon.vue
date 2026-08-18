@@ -29,6 +29,16 @@ const paths: Record<string, string> = {
   edit: 'M4 20h4L19 9l-4-4L4 16z',
   play: 'M7 4l12 8-12 8z',
   settings: 'M12 15a3 3 0 100-6 3 3 0 000 6zM4 12h2M18 12h2M12 4v2M12 18v2',
+  bold: 'M7 5h6a3.5 3.5 0 010 7H7zM7 12h7a3.5 3.5 0 010 7H7z',
+  italic: 'M10 5h8M6 19h8M14 5l-4 14',
+  code: 'M9 8l-5 4 5 4M15 8l5 4-5 4',
+  strike: 'M5 12h14M8 8a3 3 0 013-3h2a3 3 0 013 3M8 16a3 3 0 003 3h2a3 3 0 003-3',
+  link: 'M10 13a4 4 0 006 .5l2-2a4 4 0 00-6-6l-1 1M14 11a4 4 0 00-6-.5l-2 2a4 4 0 006 6l1-1',
+  h1: 'M4 6v12M12 6v12M4 12h8M17 18v-8l-2 1.5',
+  h2: 'M4 6v12M11 6v12M4 12h7M15 10a2 2 0 114 0c0 2-4 3-4 6h4',
+  list: 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01',
+  quote: 'M7 7h4v6H7zM13 7h4v6h-4zM7 13c0 2 1 3 3 4M13 13c0 2 1 3 3 4',
+  check: 'M5 13l4 4L19 7',
 }
 </script>
 

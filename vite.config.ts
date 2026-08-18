@@ -1,5 +1,5 @@
 import type { ConfigEnv } from 'vite'
-import { studioMarkdownSetup } from './node/markdown-source'
+import { studioMarkdownSetup } from './node/markdown-source.ts'
 
 /**
  * Slidev merges a `vite.config.ts` found at the root of any theme or addon.

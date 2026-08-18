@@ -1,7 +1,7 @@
 import type MarkdownIt from 'markdown-it'
 import type Token from 'markdown-it/lib/token.mjs'
-import { tagSignature } from '../shared/signature'
-import { scanTags } from './html-scan'
+import { tagSignature } from '../shared/signature.ts'
+import { scanTags } from './html-scan.ts'
 
 /**
  * Attribute carrying the Markdown line range a rendered element came from.

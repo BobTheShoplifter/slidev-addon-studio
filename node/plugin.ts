@@ -1,5 +1,5 @@
 import type { ResolvedSlidevOptions } from '@slidev/types'
-import type { Plugin } from 'vite'
+import type { Plugin, ViteDevServer } from 'vite'
 import { join, relative } from 'node:path'
 import { buildCatalog } from './catalog'
 import { assetRoot, listAssets, saveAsset } from './assets'
@@ -22,6 +22,20 @@ const STUDIO_BLOCK_REQUEST = /[?&]vue&type=studio\b/
  * empty catalog and registers no routes.
  */
 export function studioPlugin(options: ResolvedSlidevOptions): Plugin {
+  /**
+   * Slidev bakes a slide's layout into its compiled module and keeps its own
+   * in-memory copy of the deck. When Studio writes frontmatter through the
+   * slide endpoint, that copy is updated first, so the file watcher then sees
+   * no change and never rebuilds: a layout switch, or a newly inserted slide,
+   * would not appear until the server restarted. Asking the client to reload
+   * after a structural edit is blunt but truthful.
+   */
+  let devServer: ViteDevServer | null = null
+
+  function requestReload() {
+    devServer?.hot.send({ type: 'full-reload' })
+  }
+
   const isDev = options.mode === 'dev' && options.data.config.editor !== false
   const config = studioConfig(options)
 
@@ -60,6 +74,8 @@ export function studioPlugin(options: ResolvedSlidevOptions): Plugin {
       if (!isDev)
         return
 
+      devServer = server
+
       // `markdownSetup` is a single slot: a project that defines its own wins
       // over the addon's, which silently costs Studio its click-to-select.
       setTimeout(() => {
@@ -79,7 +95,7 @@ export function studioPlugin(options: ResolvedSlidevOptions): Plugin {
 
         const route = url.slice(API_PREFIX.length)
         try {
-          const result = await handle(route, req.method ?? 'GET', req, options)
+          const result = await handle(route, req.method ?? 'GET', req, options, requestReload)
           if (result === undefined)
             return next()
           res.statusCode = 200
@@ -111,7 +127,7 @@ export function studioPlugin(options: ResolvedSlidevOptions): Plugin {
   }
 }
 
-async function handle(route: string, method: string, req: any, options: ResolvedSlidevOptions) {
+async function handle(route: string, method: string, req: any, options: ResolvedSlidevOptions, requestReload: () => void) {
   if (route === 'catalog' && method === 'GET')
     return await buildCatalog(options)
 
@@ -121,8 +137,16 @@ async function handle(route: string, method: string, req: any, options: Resolved
   if (route === 'assets' && method === 'POST')
     return await saveAsset(options, await readJson(req))
 
-  if (route === 'deck' && method === 'POST')
-    return await applyDeckAction(options, await readJson(req))
+  if (route === 'deck' && method === 'POST') {
+    const result = await applyDeckAction(options, await readJson(req))
+    requestReload()
+    return result
+  }
+
+  if (route === 'reload' && method === 'POST') {
+    requestReload()
+    return { ok: true }
+  }
 
   return undefined
 }

@@ -4,7 +4,7 @@ import { useRafFn } from '@vueuse/core'
 import { computed, ref } from 'vue'
 import { mappedElements } from '../dom'
 import { useStudio } from '../context'
-import { hovered, outlineEnabled, selection } from '../state'
+import { editing, hovered, outlineEnabled, selection } from '../state'
 
 /**
  * Everything drawn on top of the slide: the hover outline, the selection box
@@ -95,7 +95,7 @@ function handleStyle(rect: Rect, handle: typeof handles[number]) {
 
     <div v-if="hoverRect" class="studio-outline studio-outline--hover" :style="style(hoverRect)" />
 
-    <template v-if="selectionRect && selection">
+    <template v-if="selectionRect && selection && !editing">
       <div class="studio-outline" :style="style(selectionRect)" />
 
       <div

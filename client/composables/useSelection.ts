@@ -5,7 +5,7 @@ import { belongsToSlide, mappedElements, slideElement } from '../dom'
 import { onDomEvent } from './useDomEvent'
 import { normalise, resolveRange } from '../md/locate'
 import { readDrag } from '../md/drag'
-import { hovered, missed, selection, studioOpen } from '../state'
+import { editing, hovered, missed, selection, studioOpen } from '../state'
 
 /**
  * Turns a click on the rendered slide into a Markdown range Studio can edit.
@@ -44,7 +44,7 @@ export function useSelection(
   }
 
   onDomEvent<PointerEvent>(document, 'pointerdown', (event) => {
-    if (!studioOpen.value || event.button !== 0)
+    if (!studioOpen.value || event.button !== 0 || editing.value)
       return
     const target = targetFrom(event.target)
     if (!target) {
@@ -61,10 +61,23 @@ export function useSelection(
   }, { capture: true })
 
   onDomEvent<PointerEvent>(document, 'pointermove', (event) => {
-    if (!studioOpen.value)
+    if (!studioOpen.value || editing.value)
       return
     hovered.value = targetFrom(event.target)
   }, { capture: true, passive: true })
+
+  // Double click edits the text where it sits, which is what people expect of
+  // anything on a canvas.
+  onDomEvent<MouseEvent>(document, 'dblclick', (event) => {
+    if (!studioOpen.value)
+      return
+    const target = targetFrom(event.target)
+    if (!target?.range)
+      return
+    event.preventDefault()
+    selection.value = target
+    editing.value = true
+  }, { capture: true })
 
   onDomEvent<KeyboardEvent>(document, 'keydown', (event) => {
     if (!studioOpen.value)

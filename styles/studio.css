@@ -550,6 +550,39 @@
   color: var(--studio-accent);
 }
 
+/* ---------- inline editor ---------- */
+
+.studio-inline {
+  position: fixed;
+  z-index: 96;
+  min-width: 260px;
+  background: var(--studio-bg);
+  border: 1px solid var(--studio-accent);
+  border-radius: var(--studio-radius);
+  box-shadow: var(--studio-shadow);
+}
+
+.studio-inline__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1px;
+  padding: 3px;
+  border-bottom: 1px solid var(--studio-border);
+}
+
+.slidev-studio .studio-inline textarea {
+  min-height: 84px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: transparent;
+  border: none;
+  border-radius: 0 0 var(--studio-radius) var(--studio-radius);
+  resize: vertical;
+}
+
 /* ---------- selection overlay ---------- */
 
 .studio-outline {
@@ -612,6 +645,35 @@
 }
 
 /* ---------- slide list ---------- */
+
+.studio-thumb-slide {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  background: var(--slidev-slide-container-background, #fff);
+  border: 1px solid var(--studio-border);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.studio-thumb-slide__stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+}
+
+.studio-slide-row--thumb {
+  align-items: flex-start;
+}
+
+.studio-slide-row--dragging {
+  opacity: 0.4;
+}
+
+.studio-slide-row--over {
+  box-shadow: inset 0 2px 0 0 var(--studio-accent);
+}
 
 .studio-slide-row {
   display: flex;

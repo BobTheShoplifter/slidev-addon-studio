@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { clearClicks, findWrapper, readClicks, writeClicks } from '../client/md/clicks'
 import { readClasses, writeClasses } from '../client/md/classes'
 import { formatPos, parsePos, readDrag, removeDrag, writeDrag } from '../client/md/drag'
+import { toggleBullet, toggleHeading, toggleQuote, toggleWrap, toLink } from '../client/md/format'
 import { formatStringArray, isArrayType, isColorValue, parseStringArray } from '../client/md/literals'
 import { getBlock, insertAfter, moveBlock, removeBlock, replaceBlock, unwrap } from '../client/md/lines'
 import { resolveRange } from '../client/md/locate'
@@ -289,5 +290,43 @@ describe('locate, against text as the DOM reports it', () => {
   it('matches a list whose items are separate elements', () => {
     const source = ['- Gjenbrukte passord', '- Manglende totrinns'].join('\n')
     expect(resolveRange(source, [0, 2], { kind: 'list', text: 'gjenbrukte passord manglende totrinns' })).toEqual([0, 2])
+  })
+})
+
+describe('inline formatting', () => {
+  const at = (text: string, start: number, end: number) => ({ text, start, end })
+
+  it('wraps and unwraps the selection', () => {
+    expect(toggleWrap(at('make me bold', 8, 12), '**')).toMatchObject({ text: 'make me **bold**' })
+    expect(toggleWrap(at('make me **bold**', 8, 16), '**')).toMatchObject({ text: 'make me bold' })
+    // Unwrapping also works when the markers sit outside the selection.
+    expect(toggleWrap(at('make me **bold**', 10, 14), '**')).toMatchObject({ text: 'make me bold' })
+  })
+
+  it('keeps the selection over the same characters after wrapping', () => {
+    const result = toggleWrap(at('make me bold', 8, 12), '**')
+    expect(result.text.slice(result.start, result.end)).toBe('bold')
+  })
+
+  it('turns a selection into a link and lands the cursor on the URL', () => {
+    const result = toLink(at('read the docs', 9, 13))
+    expect(result.text).toBe('read the [docs](https://)')
+    expect(result.text.slice(result.start, result.end)).toBe('https://')
+  })
+
+  it('sets and clears a heading level', () => {
+    expect(toggleHeading(at('Title', 0, 5), 2).text).toBe('## Title')
+    expect(toggleHeading(at('## Title', 0, 8), 2).text).toBe('Title')
+    expect(toggleHeading(at('### Title', 0, 9), 1).text).toBe('# Title')
+  })
+
+  it('toggles bullets across every line the selection touches', () => {
+    expect(toggleBullet(at('one\ntwo', 0, 7)).text).toBe('- one\n- two')
+    expect(toggleBullet(at('- one\n- two', 0, 11)).text).toBe('one\ntwo')
+  })
+
+  it('toggles a quote the same way', () => {
+    expect(toggleQuote(at('one\ntwo', 0, 7)).text).toBe('> one\n> two')
+    expect(toggleQuote(at('> one\n> two', 0, 11)).text).toBe('one\ntwo')
   })
 })

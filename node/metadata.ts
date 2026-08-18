@@ -100,6 +100,8 @@ export function parseStudioBlock(code: string): StudioMeta {
 }
 
 const RE_DOC_COMMENT = /\/\*\*([\s\S]*?)\*\//
+/** Slidev's own builtins document themselves in a leading HTML comment. */
+const RE_HTML_COMMENT = /<!--(?!\s*@studio)([\s\S]*?)-->/
 
 /**
  * Pulls the first usage example out of a component's leading doc comment.
@@ -110,12 +112,22 @@ const RE_DOC_COMMENT = /\/\*\*([\s\S]*?)\*\//
  * something meaningful instead of an empty shell.
  */
 export function parseUsageExample(code: string, name: string): string | undefined {
-  const comment = code.match(RE_DOC_COMMENT)?.[1]
+  for (const comment of [code.match(RE_DOC_COMMENT)?.[1], code.match(RE_HTML_COMMENT)?.[1]]) {
+    const example = exampleFrom(comment, name)
+    if (example)
+      return example
+  }
+  return undefined
+}
+
+function exampleFrom(comment: string | undefined, name: string): string | undefined {
   if (!comment)
     return undefined
 
   const lines = comment.split('\n').map(line => line.replace(/^\s*\* ?/, ''))
-  const open = new RegExp(`^\\s*<${name}[\\s/>]`)
+  // Slidev's own docs write `<arrow …>` for `Arrow`, so match loosely and emit
+  // the canonical name.
+  const open = new RegExp(`^\\s*<${name}[\\s/>]`, 'i')
 
   const start = lines.findIndex(line => open.test(line))
   if (start < 0)
@@ -126,7 +138,7 @@ export function parseUsageExample(code: string, name: string): string | undefine
     collected.push(lines[i])
     const joined = collected.join('\n')
     if (isBalanced(joined, name))
-      return dedent(collected).join('\n').trim()
+      return canonicalise(dedent(collected).join('\n').trim(), name)
     // A single example should not run away with the whole comment.
     if (collected.length > 12)
       return undefined
@@ -137,9 +149,15 @@ export function parseUsageExample(code: string, name: string): string | undefine
 function isBalanced(text: string, name: string) {
   if (/\/>\s*$/.test(text.trim()))
     return true
-  const opens = text.match(new RegExp(`<${name}\\b`, 'g'))?.length ?? 0
-  const closes = text.match(new RegExp(`</${name}>`, 'g'))?.length ?? 0
+  const opens = text.match(new RegExp(`<${name}\\b`, 'gi'))?.length ?? 0
+  const closes = text.match(new RegExp(`</${name}>`, 'gi'))?.length ?? 0
   return opens > 0 && opens === closes
+}
+
+function canonicalise(example: string, name: string) {
+  return example
+    .replace(new RegExp(`<${name}\\b`, 'gi'), `<${name}`)
+    .replace(new RegExp(`</${name}>`, 'gi'), `</${name}>`)
 }
 
 function dedent(lines: string[]) {
