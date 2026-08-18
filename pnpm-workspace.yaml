@@ -1,0 +1,4 @@
+# esbuild is pulled in by vitest and only ever runs in this repo's own test
+# suite, so its install script is not needed.
+allowBuilds:
+  esbuild: false

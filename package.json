@@ -1,0 +1,59 @@
+{
+  "name": "slidev-addon-studio",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "A visual editor for Slidev. Select, drag, resize, animate and compose slides on the canvas, with every change written back to your Markdown.",
+  "license": "MIT",
+  "keywords": [
+    "slidev-addon",
+    "slidev",
+    "editor",
+    "wysiwyg",
+    "presentation",
+    "vue"
+  ],
+  "homepage": "https://github.com/BobTheShoplifter/slidev-addon-studio",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BobTheShoplifter/slidev-addon-studio"
+  },
+  "engines": {
+    "node": ">=20.12.0",
+    "slidev": ">=52.0.0"
+  },
+  "files": [
+    "client",
+    "node",
+    "setup",
+    "styles",
+    "types",
+    "custom-nav-controls.vue",
+    "global-top.vue",
+    "index.d.ts",
+    "vite.config.ts"
+  ],
+  "scripts": {
+    "play": "slidev playground/slides.md --open",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@slidev/cli": ">=52.0.0",
+    "vue": "^3.5.0"
+  },
+  "dependencies": {
+    "@vueuse/core": "^14.0.0"
+  },
+  "devDependencies": {
+    "@slidev/cli": "^52.19.0",
+    "@slidev/client": "^52.19.0",
+    "@slidev/theme-default": "^0.25.0",
+    "@slidev/types": "^52.19.0",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vite": "^8.2.0",
+    "vitest": "^2.1.8",
+    "vue": "^3.5.13"
+  }
+}

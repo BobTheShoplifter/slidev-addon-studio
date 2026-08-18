@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "types": [
+      "node",
+      "@slidev/types"
+    ],
+    "paths": {
+      "@slidev/client": [
+        "./types/slidev-client.d.ts"
+      ],
+      "@slidev/client/*": [
+        "./types/slidev-client.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "client",
+    "node",
+    "setup",
+    "test",
+    "types",
+    "*.ts",
+    "*.vue"
+  ]
+}

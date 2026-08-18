@@ -1,0 +1,133 @@
+/**
+ * Reading and rewriting attributes on the opening tag of an HTML or component
+ * block. Studio uses this instead of a real HTML parser because it must round
+ * trip the author's exact formatting: only the attribute being changed moves.
+ */
+
+export interface TagInfo {
+  name: string
+  /** Index of `<` in the block. */
+  start: number
+  /** Index just past `>` in the block. */
+  end: number
+  attrs: string
+  attrsStart: number
+  attrsEnd: number
+  selfClosing: boolean
+}
+
+const RE_OPEN_TAG = /<([A-Za-z][\w.-]*)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>/
+
+export function firstTag(block: string): TagInfo | null {
+  const match = block.match(RE_OPEN_TAG)
+  if (!match || match.index === undefined)
+    return null
+  const [full, name, attrs, selfClosing] = match
+  const attrsStart = match.index + 1 + name.length
+  return {
+    name,
+    start: match.index,
+    end: match.index + full.length,
+    attrs,
+    attrsStart,
+    attrsEnd: attrsStart + attrs.length,
+    selfClosing: selfClosing === '/',
+  }
+}
+
+export interface Attr {
+  /** Attribute as written, e.g. `v-click.hide` or `:pos`. */
+  raw: string
+  /** Name without binding prefix or modifiers, e.g. `v-click`, `pos`. */
+  name: string
+  modifiers: string[]
+  bound: boolean
+  value: string | null
+  start: number
+  end: number
+}
+
+const RE_ATTR = /([@:.]?[\w@:.\-[\]]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g
+
+export function parseAttrs(attrs: string, offset = 0): Attr[] {
+  const result: Attr[] = []
+  for (const match of attrs.matchAll(RE_ATTR)) {
+    const [full, raw, rawValue] = match
+    const index = match.index ?? 0
+    const bound = raw.startsWith(':') || raw.startsWith('v-bind:')
+    const withoutBinding = raw.replace(/^:|^v-bind:/, '')
+    const [name, ...modifiers] = withoutBinding.startsWith('v-')
+      ? withoutBinding.split('.')
+      : [withoutBinding]
+    result.push({
+      raw,
+      name: withoutBinding.startsWith('v-') ? name : withoutBinding,
+      modifiers,
+      bound,
+      value: rawValue ? stripQuotes(rawValue) : null,
+      start: offset + index,
+      end: offset + index + full.length,
+    })
+  }
+  return result
+}
+
+function stripQuotes(value: string) {
+  return /^["']/.test(value) ? value.slice(1, -1) : value
+}
+
+export function findAttr(block: string, name: string): Attr | null {
+  const tag = firstTag(block)
+  if (!tag)
+    return null
+  return parseAttrs(tag.attrs, tag.attrsStart).find(a => a.name === name) ?? null
+}
+
+export interface WriteAttrOptions {
+  /** Write as `:name="value"` rather than `name="value"`. */
+  bound?: boolean
+  modifiers?: string[]
+}
+
+/**
+ * Sets, replaces or removes an attribute on the block's opening tag.
+ * Passing `value: null` and no modifiers removes it.
+ */
+export function writeAttr(
+  block: string,
+  name: string,
+  value: string | true | null,
+  options: WriteAttrOptions = {},
+): string {
+  const tag = firstTag(block)
+  if (!tag)
+    return block
+
+  const existing = parseAttrs(tag.attrs, tag.attrsStart).find(a => a.name === name)
+  const next = value === null ? '' : renderAttr(name, value, options)
+
+  if (existing) {
+    const before = block.slice(0, existing.start)
+    const after = block.slice(existing.end)
+    if (!next) {
+      // Drop the separator we would otherwise leave behind.
+      return `${before.replace(/\s+$/, '')}${after.startsWith(' ') ? after : ` ${after}`}`
+        .replace(/\s+>/, '>')
+        .replace(/\s+\/>/, ' />')
+    }
+    return before + next + after
+  }
+
+  if (!next)
+    return block
+
+  const before = tag.attrs.endsWith(' ') || !tag.attrs.length ? '' : ' '
+  // A self-closing tag needs its slash kept off the attribute: `v-click />`.
+  const after = tag.selfClosing ? ' ' : ''
+  return block.slice(0, tag.attrsEnd) + before + next + after + block.slice(tag.attrsEnd)
+}
+
+function renderAttr(name: string, value: string | true, options: WriteAttrOptions) {
+  const key = `${options.bound ? ':' : ''}${name}${options.modifiers?.length ? `.${options.modifiers.join('.')}` : ''}`
+  return value === true ? key : `${key}="${String(value).replace(/"/g, '&quot;')}"`
+}
