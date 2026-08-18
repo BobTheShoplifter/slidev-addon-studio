@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import type { BasicBlock } from '../../blocks'
 import type { CatalogComponent } from '../../types'
 import { ref } from 'vue'
 import { onDomEvent } from '../../composables/useDomEvent'
 import { CANVAS_SELECTOR } from '../../dom'
+import { computed } from 'vue'
+import { BASIC_BLOCKS } from '../../blocks'
 import { useCatalog } from '../../composables/useCatalog'
 import { useStudio } from '../../context'
 import { insertSnippet, positioned } from '../../md/insert'
@@ -19,7 +22,15 @@ import ComponentPreview from '../parts/ComponentPreview.vue'
 const studio = useStudio()
 const { query, groups, sources, toggleSource } = useCatalog()
 
-const dragging = ref<CatalogComponent | null>(null)
+/** Whatever is being dragged onto the canvas, component or plain block. */
+const dragging = ref<{ label: string, snippet: string } | null>(null)
+
+const blocks = computed(() => {
+  const needle = query.value.trim().toLowerCase()
+  if (!needle)
+    return BASIC_BLOCKS
+  return BASIC_BLOCKS.filter(b => b.name.toLowerCase().includes(needle) || b.description.toLowerCase().includes(needle))
+})
 
 const sourceFilters = [
   { id: 'project', label: 'Project' },
@@ -28,11 +39,11 @@ const sourceFilters = [
   { id: 'builtin', label: 'Slidev' },
 ] as const
 
-async function insert(component: CatalogComponent) {
+async function insert(item: { name: string, snippet: string }) {
   const range = selection.value?.range
   await studio.commit(
-    insertSnippet(studio.content(), component.snippet, range ? { mode: 'after', range } : { mode: 'append' }),
-    `Insert ${component.name}`,
+    insertSnippet(studio.content(), item.snippet, range ? { mode: 'after', range } : { mode: 'append' }),
+    `Insert ${item.name}`,
   )
 }
 
@@ -70,8 +81,34 @@ onDomEvent<DragEvent>(window, 'drop', async (event) => {
     </div>
   </div>
 
-  <div v-if="!groups.length" class="studio-empty">
-    No components match.
+  <section v-if="blocks.length">
+    <h3 class="studio-section__title" style="padding: 12px 12px 0">
+      Basic
+    </h3>
+    <div class="studio-grid">
+      <button
+        v-for="block in blocks"
+        :key="block.name"
+        class="studio-card"
+        draggable="true"
+        :title="block.description"
+        @click="insert(block)"
+        @dragstart="dragging = { label: block.name, snippet: block.snippet }"
+        @dragend="dragging = null"
+      >
+        <span class="studio-card__preview">
+          <span class="studio-card__placeholder">{{ block.sample }}</span>
+        </span>
+        <span class="studio-card__label">
+          <span class="studio-card__name">{{ block.name }}</span>
+          <span class="studio-card__meta">{{ block.description }}</span>
+        </span>
+      </button>
+    </div>
+  </section>
+
+  <div v-if="!groups.length && !blocks.length" class="studio-empty">
+    Nothing matches.
   </div>
 
   <section v-for="[group, items] in groups" :key="group">
@@ -86,7 +123,7 @@ onDomEvent<DragEvent>(window, 'drop', async (event) => {
         draggable="true"
         :title="component.description ?? component.name"
         @click="insert(component)"
-        @dragstart="dragging = component"
+        @dragstart="dragging = { label: component.name, snippet: component.snippet }"
         @dragend="dragging = null"
       >
         <ComponentPreview :component="component" />

@@ -340,12 +340,34 @@ function parseObjectProps(body: string): PropMeta[] {
 }
 
 /**
- * The markup inserted when a component is picked from the palette. Required
- * props are stubbed so the result renders rather than erroring, and only
- * components that actually render a slot are given children.
+ * The markup inserted when a component is picked from the palette.
+ *
+ * Required props are stubbed with a value of the right shape. An empty string
+ * would satisfy the syntax but fail Vue's prop validation, filling the console
+ * with warnings the moment the palette renders a preview.
  */
 function defaultSnippet(name: string, props: PropMeta[], hasSlot: boolean): string {
   const required = props.filter(p => p.required && p.name !== 'modelValue').slice(0, 3)
-  const attrs = required.map(p => ` ${p.name}="${p.options?.[0] ?? p.default ?? ''}"`).join('')
+  const attrs = required.map(stubAttr).join('')
   return hasSlot ? `<${name}${attrs}>Text</${name}>` : `<${name}${attrs} />`
+}
+
+function stubAttr(prop: PropMeta): string {
+  if (prop.options?.length)
+    return ` ${prop.name}="${prop.options[0]}"`
+  if (prop.default)
+    return ` ${prop.name}="${prop.default}"`
+
+  const type = (prop.type ?? 'string').toLowerCase()
+  if (type.includes('[]') || type.startsWith('array'))
+    return ` :${prop.name}="[]"`
+  if (type.startsWith('{') || type.startsWith('object') || type.startsWith('record'))
+    return ` :${prop.name}="{}"`
+  if (type.includes('number'))
+    return ` :${prop.name}="0"`
+  if (type.includes('boolean'))
+    return ` ${prop.name}`
+  if (type.includes('function') || type.includes('=>'))
+    return ''
+  return ` ${prop.name}="${prop.name}"`
 }

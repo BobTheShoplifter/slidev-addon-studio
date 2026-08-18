@@ -37,14 +37,14 @@ or in `package.json`, which applies it to every deck in the project:
 }
 ```
 
-Start `slidev` as usual and press <kbd>E</kbd>.
+Start `slidev` as usual and press <kbd>E</kbd>, or use the pencil button in Slidev's bottom bar. Studio adds nothing to the slide while it is closed.
 
 ## What it does
 
 | Panel | What it edits |
 | --- | --- |
 | **Element** | Position, size, rotation, utility classes, order, duplicate, delete, and the raw Markdown of the selected block |
-| **Components** | Every component this deck can use, with live previews. Click to insert, drag onto the canvas to place freely |
+| **Components** | Plain Markdown blocks (heading, text, list, quote, image, code) plus every component this deck can use, with live previews. Click to insert, drag onto the canvas to place freely |
 | **Animate** | Click steps, reveal and hide, entrance animations, staggered lists, motion presets, slide transitions |
 | **Layout** | The slide's layout, title, classes, background, zoom, click count, and presenter notes |
 | **Slides** | Add, duplicate, delete and reorder slides |

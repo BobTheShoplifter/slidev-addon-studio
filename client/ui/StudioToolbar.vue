@@ -6,6 +6,11 @@ import StudioIcon from './parts/StudioIcon.vue'
 
 const history = useStudioHistory()
 
+/**
+ * Only shown while Studio is open. When it is closed the way in is Slidev's own
+ * bottom bar, which already holds the deck's controls, so a closed editor adds
+ * nothing to the slide.
+ */
 const tabs: { id: PanelId, icon: string, label: string }[] = [
   { id: 'inspect', icon: 'cursor', label: 'Element' },
   { id: 'components', icon: 'components', label: 'Components' },
@@ -17,67 +22,60 @@ const tabs: { id: PanelId, icon: string, label: string }[] = [
 </script>
 
 <template>
-  <div class="studio-toolbar">
+  <div v-if="studioOpen" class="studio-toolbar">
     <button
-      class="studio-icon-button"
-      :aria-pressed="studioOpen"
-      title="Toggle Studio (E)"
-      @click="studioOpen = !studioOpen"
+      v-for="tab in tabs"
+      :key="tab.id"
+      class="studio-tab"
+      role="tab"
+      :aria-selected="activePanel === tab.id"
+      :title="tab.label"
+      @click="activePanel = tab.id"
     >
-      <StudioIcon name="edit" />
+      <StudioIcon :name="tab.icon" :size="15" />
+      <span>{{ tab.label }}</span>
     </button>
 
-    <template v-if="studioOpen">
-      <span class="studio-toolbar__divider" />
+    <span class="studio-toolbar__divider" />
 
-      <button
-        v-for="tab in tabs"
-        :key="tab.id"
-        class="studio-tab"
-        role="tab"
-        :aria-selected="activePanel === tab.id"
-        :title="tab.label"
-        @click="activePanel = tab.id"
-      >
-        <StudioIcon :name="tab.icon" :size="15" />
-        <span>{{ tab.label }}</span>
-      </button>
+    <button
+      class="studio-icon-button"
+      :disabled="!canUndo"
+      :title="lastAction ? `Undo ${lastAction.toLowerCase()}` : 'Undo'"
+      @click="history.undo()"
+    >
+      <StudioIcon name="undo" />
+    </button>
+    <button class="studio-icon-button" :disabled="!canRedo" title="Redo" @click="history.redo()">
+      <StudioIcon name="redo" />
+    </button>
 
-      <span class="studio-toolbar__divider" />
+    <span class="studio-toolbar__divider" />
 
-      <button
-        class="studio-icon-button"
-        :disabled="!canUndo"
-        :title="lastAction ? `Undo ${lastAction.toLowerCase()}` : 'Undo'"
-        @click="history.undo()"
-      >
-        <StudioIcon name="undo" />
-      </button>
-      <button class="studio-icon-button" :disabled="!canRedo" title="Redo" @click="history.redo()">
-        <StudioIcon name="redo" />
-      </button>
+    <button
+      class="studio-icon-button"
+      :aria-pressed="snapEnabled"
+      title="Snap to guides. Hold Alt to bypass"
+      @click="snapEnabled = !snapEnabled"
+    >
+      <StudioIcon name="magnet" />
+    </button>
+    <button class="studio-icon-button" :aria-pressed="gridEnabled" title="Snap to grid" @click="gridEnabled = !gridEnabled">
+      <StudioIcon name="grid" />
+    </button>
+    <button
+      class="studio-icon-button"
+      :aria-pressed="outlineEnabled"
+      title="Outline everything selectable"
+      @click="outlineEnabled = !outlineEnabled"
+    >
+      <StudioIcon name="eye" />
+    </button>
 
-      <span class="studio-toolbar__divider" />
+    <span class="studio-toolbar__divider" />
 
-      <button
-        class="studio-icon-button"
-        :aria-pressed="snapEnabled"
-        title="Snap to guides. Hold Alt to bypass"
-        @click="snapEnabled = !snapEnabled"
-      >
-        <StudioIcon name="magnet" />
-      </button>
-      <button class="studio-icon-button" :aria-pressed="gridEnabled" title="Snap to grid" @click="gridEnabled = !gridEnabled">
-        <StudioIcon name="grid" />
-      </button>
-      <button
-        class="studio-icon-button"
-        :aria-pressed="outlineEnabled"
-        title="Outline everything selectable"
-        @click="outlineEnabled = !outlineEnabled"
-      >
-        <StudioIcon name="eye" />
-      </button>
-    </template>
+    <button class="studio-icon-button" title="Close Studio (E)" @click="studioOpen = false">
+      <StudioIcon name="close" />
+    </button>
   </div>
 </template>

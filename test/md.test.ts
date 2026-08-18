@@ -79,6 +79,11 @@ describe('tags', () => {
     expect(findAttr('<div :pos="[1,2]">x</div>', 'pos')?.bound).toBe(true)
   })
 
+  it('separates the first attribute on a bare tag', () => {
+    expect(writeAttr('<Pill>Hi</Pill>', 'v-drag', '[1,2,3]')).toBe('<Pill v-drag="[1,2,3]">Hi</Pill>')
+    expect(writeAttr('<Pill/>', 'v-click', true)).toBe('<Pill v-click />')
+  })
+
   it('keeps a self-closing tag self-closing', () => {
     expect(writeAttr('<Mascot name="shield" />', 'v-click', true)).toBe('<Mascot name="shield" v-click />')
   })

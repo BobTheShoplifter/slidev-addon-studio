@@ -121,7 +121,9 @@ export function writeAttr(
   if (!next)
     return block
 
-  const before = tag.attrs.endsWith(' ') || !tag.attrs.length ? '' : ' '
+  // `<Pill>` has no attributes at all, so it still needs a separator before
+  // the first one: without it the tag becomes `<Pillv-drag=...>`.
+  const before = tag.attrs.length && tag.attrs.endsWith(' ') ? '' : ' '
   // A self-closing tag needs its slash kept off the attribute: `v-click />`.
   const after = tag.selfClosing ? ' ' : ''
   return block.slice(0, tag.attrsEnd) + before + next + after + block.slice(tag.attrsEnd)

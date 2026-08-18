@@ -40,7 +40,10 @@ const BLOCK_TOKENS: Record<string, string> = {
  * Matches the first opening tag of an HTML block so we can inject into it the
  * same way Slidev injects `:markdownSource` for `v-drag`.
  */
-const RE_FIRST_TAG = /<([A-Za-z][\w.-]*)((?:\s[^>]*?)?)(\/?)>/
+const RE_FIRST_TAG = /^(\s*)<([A-Za-z][\w.-]*)((?:\s[^>]*?)?)(\/?)>/
+
+/** Raw HTML shows up under two token types, depending on how it was written. */
+const HTML_TOKENS = new Set(['html_block', 'html_inline'])
 
 /** Tags we never annotate: they either vanish or break when given attributes. */
 const SKIPPED_TAGS = new Set(['template', 'style', 'script', 'br', 'hr', 'v-clicks', 'v-click', 'v-after', 'v-switch', 'v-drag'])
@@ -104,7 +107,7 @@ function annotateTokens(tokens: Token[], annotate: 'all' | 'html' | 'off') {
     if (token.children?.length)
       annotateTokens(token.children, annotate)
 
-    if (!token.map)
+    if (!token.map || token.hidden)
       continue
 
     const [start, end] = token.map
@@ -117,13 +120,25 @@ function annotateTokens(tokens: Token[], annotate: 'all' | 'html' | 'off') {
       continue
     }
 
-    if (token.type === 'html_block' && annotate !== 'off')
+    // `<Pill>Label</Pill>` alone on a line is not an HTML *block*: markdown-it
+    // emits it as a top-level `html_inline` with no paragraph around it. Slidev
+    // treats both the same way for `v-drag`, and so must this, or a component
+    // written on one line would be invisible to the editor.
+    if (HTML_TOKENS.has(token.type) && annotate !== 'off')
       token.content = injectIntoHtml(token.content, range, annotate)
   }
 }
 
+/**
+ * Adds the annotation to the opening tag a chunk of raw HTML starts with.
+ *
+ * Anchored to the start on purpose. An HTML comment is also an `html_block`,
+ * and prose inside one can easily look like a tag: matching the first tag
+ * anywhere would rewrite `decks/<my-talk>.md` in a comment into a mangled
+ * pseudo-element.
+ */
 function injectIntoHtml(html: string, range: string, annotate: 'all' | 'html') {
-  return html.replace(RE_FIRST_TAG, (full, tag: string, attrs: string, selfClose: string) => {
+  return html.replace(RE_FIRST_TAG, (full, lead: string, tag: string, attrs: string, selfClose: string) => {
     const lower = tag.toLowerCase()
     if (SKIPPED_TAGS.has(lower) || SKIPPED_TAGS.has(tag))
       return full
@@ -136,6 +151,6 @@ function injectIntoHtml(html: string, range: string, annotate: 'all' | 'html') {
     // `attrs` is either empty or starts with whitespace, so a tag with no
     // attributes still needs a separator before the injected one.
     const space = attrs.endsWith(' ') ? '' : ' '
-    return `<${tag}${attrs}${space}${SOURCE_ATTR}="${range}" ${KIND_ATTR}="${kind}" ${TAG_ATTR}="${tag}"${selfClose ? " /" : ""}>`
+    return `${lead}<${tag}${attrs}${space}${SOURCE_ATTR}="${range}" ${KIND_ATTR}="${kind}" ${TAG_ATTR}="${tag}"${selfClose ? ' /' : ''}>`
   })
 }
