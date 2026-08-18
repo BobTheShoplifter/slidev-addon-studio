@@ -515,7 +515,10 @@
 }
 
 .studio-dropzone {
+  /* A <label>, so it needs to be told to take its padding seriously. */
+  display: block;
   margin: 12px;
+  cursor: pointer;
   padding: 18px;
   color: var(--studio-text-dim);
   text-align: center;
