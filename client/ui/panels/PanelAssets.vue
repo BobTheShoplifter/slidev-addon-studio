@@ -14,12 +14,14 @@ import { selection } from '../../state'
 const studio = useStudio()
 
 const assets = ref<StudioAsset[]>([])
+const root = ref('')
 const over = ref(false)
 const uploading = ref(false)
 
 async function refresh() {
   const result = await assetApi.list()
   assets.value = result?.assets ?? []
+  root.value = result?.root ?? ''
 }
 
 onMounted(refresh)
@@ -65,7 +67,11 @@ async function place(asset: StudioAsset) {
   </label>
 
   <div v-if="!assets.length" class="studio-empty">
-    Nothing in <code>public/</code> yet.
+    <p>Nothing here yet.</p>
+    <p class="studio-hint">
+      Assets live next to the deck, in <code>{{ root || 'public/' }}</code>.
+      Dropping a file creates the directory.
+    </p>
   </div>
 
   <div v-else class="studio-grid">

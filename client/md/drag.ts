@@ -72,8 +72,8 @@ export function readDrag(content: string, range: SourceRange): DragInfo | null {
 function findDragWrapper(content: string, range: SourceRange) {
   const lines = toLines(content)
 
-  let above = range[0] - 1
-  while (above >= 0 && !lines[above].trim())
+  let above = Math.min(range[0], lines.length) - 1
+  while (above >= 0 && !lines[above]?.trim())
     above -= 1
   const open = above >= 0 ? lines[above].trim().match(RE_DRAG_OPEN) : null
   if (!open)

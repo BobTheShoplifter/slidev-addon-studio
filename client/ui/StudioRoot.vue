@@ -26,14 +26,19 @@ const no = computed(() => nav.currentSlideNo.value)
 
 const source = useSlideSource(no)
 const canvas = useSlideCanvas(() => Number(source.frontmatter.value.zoom ?? 1))
-const selectionApi = useSelection(() => no.value, () => source.content.value)
-
 async function commit(content: string, label: string, options?: { skipHmr?: boolean }) {
   const current = selection.value
   await source.setContent(content, label, options)
   if (current)
     await selectionApi.reselect(current.range, current.kind, current.tag)
 }
+
+const selectionApi = useSelection(
+  () => no.value,
+  () => source.content.value,
+  // Deleting drops the selection outright, so there is nothing to restore.
+  (next, label) => source.setContent(next, label),
+)
 
 const gizmo = useTransformGizmo({
   canvas,

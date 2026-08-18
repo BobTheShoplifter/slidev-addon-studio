@@ -53,7 +53,7 @@ export const deckApi = {
 }
 
 export const assetApi = {
-  list: () => request<{ assets: StudioAsset[] }>('assets'),
+  list: () => request<{ assets: StudioAsset[], root: string }>('assets'),
   upload: (name: string, data: string, dir?: string) => post<StudioAsset>('assets', { name, data, dir }),
 }
 

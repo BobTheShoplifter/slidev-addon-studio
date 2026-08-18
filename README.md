@@ -37,14 +37,15 @@ or in `package.json`, which applies it to every deck in the project:
 }
 ```
 
-Start `slidev` as usual and press <kbd>E</kbd>, or use the pencil button in Slidev's bottom bar. Studio adds nothing to the slide while it is closed.
+Start `slidev` as usual and press <kbd>E</kbd>, or use the pencil button in
+Slidev's bottom bar. Studio adds nothing to the slide while it is closed.
 
 ## What it does
 
 | Panel | What it edits |
 | --- | --- |
-| **Element** | Position, size, rotation, utility classes, order, duplicate, delete, and the raw Markdown of the selected block |
-| **Components** | Plain Markdown blocks (heading, text, list, quote, image, code) plus every component this deck can use, with live previews. Click to insert, drag onto the canvas to place freely |
+| **Element** | Position, size, rotation, component props, utility classes, order, duplicate, delete, and the raw Markdown of the selection |
+| **Components** | Markdown basics plus every component this deck can use, with live previews. Click to insert, drag onto the canvas to place freely |
 | **Animate** | Click steps, reveal and hide, entrance animations, staggered lists, motion presets, slide transitions |
 | **Layout** | The slide's layout, title, classes, background, zoom, click count, and presenter notes |
 | **Slides** | Add, duplicate, delete and reorder slides |
@@ -58,18 +59,30 @@ exact lines of Markdown it came from and shows them in the Element panel.
 Drag the selection and the block leaves the document flow: Studio wraps it in
 Slidev's own `v-drag`, so the position is written into the Markdown as
 `pos="x,y,w,h"` in slide canvas units. Handles resize, the top handle rotates,
-and holding <kbd>Shift</kbd> keeps the aspect ratio or snaps rotation to 15°
-steps. "Return to flow" in the Element panel undoes all of it.
+and <kbd>Backspace</kbd> deletes. "Return to flow" in the Element panel undoes
+the free positioning.
 
 Elements snap to the canvas edges, its centre and thirds, and to the edges and
 centres of everything else on the slide. Hold <kbd>Alt</kbd> to place something
 exactly where you want it instead.
 
+### Editing props
+
+Select a component and the Element panel becomes a form for it, built from the
+component's own props. Numbers are written bound (`:size="140"`), enumerated
+strings plainly (`color="red"`), and options backed by image files get a picker
+that shows the images.
+
+![The Element panel showing a component's props, including a picker of shapes read from a folder of SVG files](./docs/element-props.jpg)
+
 ### Animating
 
 Slidev's animation model is a sequence of click steps per slide, so the Animate
-panel leads with that sequence and lets you scrub it. Studio writes whichever
-form fits the block:
+panel leads with that sequence and lets you scrub it.
+
+![The Animate panel with a click scrubber and reveal settings for the selected list](./docs/animate.jpg)
+
+Studio writes whichever form fits the block:
 
 ```md
 <!-- an element or component takes the directive -->
@@ -91,47 +104,86 @@ form fits the block:
 </v-clicks>
 ```
 
+### Inserting
+
+![The Components panel showing Markdown basics above the deck's own components](./docs/components.jpg)
+
+The palette starts with the plain Markdown blocks, because most of what goes on
+a slide is a heading, a paragraph or a list. Below those sit every component the
+deck can actually use: Slidev's builtins, the active theme, each addon, and your
+own `components/` directory.
+
 ### Keyboard
 
 | Key | Action |
 | --- | --- |
 | <kbd>E</kbd> | Open and close Studio |
+| <kbd>Backspace</kbd> or <kbd>Delete</kbd> | Delete the selected element |
 | <kbd>Esc</kbd> | Deselect |
 | <kbd>Ctrl</kbd> + <kbd>Z</kbd> | Undo |
 | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd> | Redo |
 | <kbd>Alt</kbd> (held) | Bypass snapping while dragging |
-| <kbd>Shift</kbd> (held) | Keep aspect ratio, or snap rotation |
+| <kbd>Shift</kbd> (held) | Keep aspect ratio, or snap rotation to 15 degrees |
 
 Undo history lives in the page, so a reload clears it. Your deck is a file in
 git; that is the real undo.
 
-## Making your components palette-friendly
+## Teaching Studio about your components
 
-Any component Slidev can resolve shows up in the palette automatically, with a
-live preview rendered from the real component. Add an optional metadata block at
-the top of an SFC to control how it appears:
+Any component Slidev can resolve appears in the palette automatically. Two
+things happen without you writing a line of configuration:
+
+**The usage example in the component's doc comment becomes the snippet.** A
+component documented like this:
+
+```ts
+/**
+ * BigCount - the talk's signature beat, a number that counts up on reveal.
+ *
+ *   <BigCount :to="138723" label="Enheter" />
+ */
+```
+
+is inserted as `<BigCount :to="138723" label="Enheter" />`, with real values, and
+previewed with them. That beats anything synthesised from prop types, and it is
+something most well-documented components already have.
+
+**Props are read from `defineProps`.** Types drive the controls: a string union
+becomes a dropdown, a number gets bound, a boolean gets a toggle.
+
+For anything more, add an `@studio` block. It is plain YAML:
 
 ```html
 <!-- @studio
-description: A rounded label
-category: Content
-snippet: |
-  <Pill color="red">Label</Pill>
-preview: |
-  <Pill color="red">Label</Pill>
+description: One of the site's mascot illustrations
+category: Brand
+props:
+  name:
+    label: Mascot
+    options:
+      files: ../assets/mascots/*.svg
+      exclude: '*-stroke.svg'
+  stroke:
+    label: Light on dark
 -->
 ```
 
 | Key | Meaning |
 | --- | --- |
-| `description` | One line shown under the name |
+| `description` | One line shown under the name; defaults to the first line of the doc comment |
 | `category` | Groups the component in the palette; defaults to its package |
 | `snippet` | Markup inserted when the component is picked |
-| `preview` | Markup rendered in the thumbnail; defaults to `snippet`, or `false` to skip |
-| `studio: false` | Keep the component out of the palette entirely |
+| `preview` | Markup rendered in the thumbnail; defaults to the snippet, or `false` to skip |
+| `hidden` | Keep the component out of the palette entirely |
+| `props.<name>.label` | Human label for the inspector |
+| `props.<name>.hidden` | Keep the prop out of the inspector |
+| `props.<name>.options` | A list of values, or `{ files, exclude }` globs |
 
-Without a block, Studio infers a snippet from the component's props and whether
-it renders a slot.
+The `files` glob is resolved against the component's own directory, so a
+component that ships a folder of assets can offer them as choices with nothing
+hardcoded in the editor. When the files are images, the inspector shows a
+picker of the images themselves. `playground/components/Shape.vue` is a working
+example of exactly that.
 
 ## Configuration
 
@@ -187,8 +239,13 @@ worth being dull about.
   their own file.
 - The first slide of the entry file cannot be deleted or moved: its frontmatter
   is the deck's global configuration.
-- Prop extraction for the palette understands `defineProps` and the Options API.
-  Anything more exotic simply shows no props; the component still works.
+- Prop extraction understands `defineProps` and the Options API. Anything more
+  exotic simply shows no props; the component still works, and an `@studio`
+  block can describe the props by hand.
+- A usage example that abbreviates, such as `:items="[{ … }, …]"`, is still
+  inserted as the snippet but cannot be previewed, since it is not valid
+  JavaScript. Add `preview:` to the `@studio` block to give the palette
+  something it can render.
 - If your project sets `slidev.markdown.markdownSetup` in its own Vite config,
   it replaces the addon's and click-to-select stops working. Studio warns on
   startup. Call `studioMarkdownSetup(md)` from your setup to restore it:
@@ -226,6 +283,9 @@ To try it against a real deck, link it in:
 ```bash
 pnpm add -D "link:../slidev-addon-studio"
 ```
+
+`link:` rather than `file:`, so edits reach the running dev server instead of
+being copied once at install time.
 
 ## License
 

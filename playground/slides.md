@@ -26,6 +26,16 @@ Select one and the Element panel shows the exact Markdown behind it.
 <Badge label="a component" />
 
 ---
+
+# Props, without leaving the canvas
+
+Select the shape and the Element panel offers its props. The picker below is not
+hardcoded: `Shape.vue` declares that its `name` prop comes from `./shapes/*.svg`,
+so the editor lists whatever is in that folder.
+
+<Shape name="hexagon" :size="150" caption="A hexagon" />
+
+---
 layout: center
 ---
 

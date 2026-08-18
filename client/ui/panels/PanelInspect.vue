@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { configs } from '@slidev/client/env.ts'
+import { useCatalog } from '../../composables/useCatalog'
 import { useStudio } from '../../context'
+import { readProp, writeProp } from '../../md/props'
 import { parsePos, readDrag, removeDrag, writeDrag } from '../../md/drag'
 import { getBlock, moveBlock, removeBlock, insertAfter, replaceBlock } from '../../md/lines'
 import { readClasses, writeClasses } from '../../md/classes'
 import { selection } from '../../state'
+import PropField from '../parts/PropField.vue'
 import StudioField from '../parts/StudioField.vue'
 import StudioIcon from '../parts/StudioIcon.vue'
 
@@ -15,8 +18,31 @@ import StudioIcon from '../parts/StudioIcon.vue'
  * back to the slide.
  */
 const studio = useStudio()
+const { components } = useCatalog()
 
 const range = computed(() => selection.value?.range ?? null)
+
+/**
+ * The catalog entry behind the selected tag, if it is a component. That is
+ * where the prop list, its labels and its options come from, so a component
+ * gets a real form rather than a text box full of markup.
+ */
+const component = computed(() => {
+  const tag = selection.value?.tag
+  return tag ? components.find(c => c.name === tag) ?? null : null
+})
+
+const editableProps = computed(() => component.value?.props.filter(p => !p.hidden) ?? [])
+
+function valueOf(prop: (typeof editableProps.value)[number]) {
+  return range.value ? readProp(studio.content(), range.value, prop) : null
+}
+
+async function setProp(prop: (typeof editableProps.value)[number], value: string | boolean | null) {
+  if (!range.value)
+    return
+  await studio.commit(writeProp(studio.content(), range.value, prop, value), `Set ${prop.name}`)
+}
 const block = computed(() => (range.value ? getBlock(studio.content(), range.value) : ''))
 const drag = computed(() => (range.value ? readDrag(studio.content(), range.value) : null))
 const pos = computed(() => drag.value?.pos ?? null)
@@ -147,6 +173,25 @@ async function remove() {
           Free elements are positioned in canvas units ({{ studio.canvas.slideWidth.value }} wide).
         </p>
       </template>
+    </section>
+
+    <section v-if="component" class="studio-section">
+      <h3 class="studio-section__title">
+        {{ component.name }} props
+      </h3>
+      <p v-if="!editableProps.length" class="studio-hint">
+        This component takes no props.
+      </p>
+      <PropField
+        v-for="prop in editableProps"
+        :key="prop.name"
+        :prop="prop"
+        :value="valueOf(prop)"
+        @change="setProp(prop, $event)"
+      />
+      <p v-if="component.description" class="studio-hint">
+        {{ component.description }}
+      </p>
     </section>
 
     <section class="studio-section">

@@ -1,5 +1,6 @@
 import type { SourceRange, StudioTarget, TargetKind } from '../types'
 import { nextTick, watch } from 'vue'
+import { removeBlock } from '../md/lines'
 import { belongsToSlide, mappedElements, slideElement } from '../dom'
 import { onDomEvent } from './useDomEvent'
 import { normalise, resolveRange } from '../md/locate'
@@ -15,7 +16,11 @@ import { hovered, selection, studioOpen } from '../state'
  * would cost a user their deck.
  */
 
-export function useSelection(no: () => number, content: () => string) {
+export function useSelection(
+  no: () => number,
+  content: () => string,
+  remove?: (next: string, label: string) => Promise<void>,
+) {
   function targetFrom(node: EventTarget | null): StudioTarget | null {
     if (!(node instanceof Element))
       return null
@@ -57,9 +62,25 @@ export function useSelection(no: () => number, content: () => string) {
   }, { capture: true, passive: true })
 
   onDomEvent<KeyboardEvent>(document, 'keydown', (event) => {
-    if (!studioOpen.value || event.key !== 'Escape')
+    if (!studioOpen.value)
       return
+
+    if (event.key === 'Escape') {
+      selection.value = null
+      return
+    }
+
+    if (event.key !== 'Backspace' && event.key !== 'Delete')
+      return
+    // Never while the user is typing into one of the editor's own fields.
+    if (isTyping(event.target) || !selection.value?.range || !remove)
+      return
+
+    // Backspace would otherwise navigate the browser back and lose the deck.
+    event.preventDefault()
+    const target = selection.value
     selection.value = null
+    remove(removeBlock(content(), target.range!), `Delete ${target.label}`)
   })
 
   watch(studioOpen, (open) => {
@@ -94,6 +115,14 @@ export function useSelection(no: () => number, content: () => string) {
   }
 
   return { select, targetFrom, reselect }
+}
+
+/** Focus is in a text field, so the key belongs to that field, not the canvas. */
+function isTyping(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement))
+    return false
+  return target.isContentEditable
+    || ['input', 'textarea', 'select'].includes(target.tagName.toLowerCase())
 }
 
 function describe(el: HTMLElement, no: number, content: string): StudioTarget {

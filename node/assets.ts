@@ -21,8 +21,13 @@ export interface AssetEntry {
   kind: 'image' | 'video'
 }
 
+/** Where `public/` resolves to, which is the deck's directory, not the repo root. */
+export function assetRoot(options: ResolvedSlidevOptions) {
+  return join(options.userRoot, 'public')
+}
+
 export async function listAssets(options: ResolvedSlidevOptions): Promise<AssetEntry[]> {
-  const root = join(options.userRoot, 'public')
+  const root = assetRoot(options)
   const assets: AssetEntry[] = []
 
   let entries: Awaited<ReturnType<typeof readdir>>
@@ -66,7 +71,7 @@ export async function saveAsset(options: ResolvedSlidevOptions, payload: UploadP
   if (buffer.byteLength > MAX_UPLOAD_BYTES)
     throw new Error(`File is larger than ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`)
 
-  const publicRoot = join(options.userRoot, 'public')
+  const publicRoot = assetRoot(options)
   const dir = sanitizeSegment(payload.dir ?? '')
   const targetDir = dir ? join(publicRoot, dir) : publicRoot
   await mkdir(targetDir, { recursive: true })

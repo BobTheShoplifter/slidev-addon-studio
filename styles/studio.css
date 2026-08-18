@@ -282,6 +282,58 @@
   font-size: 12px;
 }
 
+/* ---------- prop pickers ---------- */
+
+.studio-field--stacked {
+  display: block;
+}
+
+.studio-field--stacked .studio-field__label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.studio-thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--studio-bg-soft);
+  border: 1px solid var(--studio-border);
+  border-radius: var(--studio-radius);
+}
+
+.studio-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  padding: 4px;
+  overflow: hidden;
+  font-size: 10px;
+  color: var(--studio-text-dim);
+  background: var(--studio-bg);
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.studio-thumb:hover {
+  border-color: var(--studio-border);
+}
+
+.studio-thumb--active {
+  border-color: var(--studio-accent);
+  background: var(--studio-accent-soft);
+}
+
+.studio-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 /* ---------- catalog ---------- */
 
 .studio-catalog__search {

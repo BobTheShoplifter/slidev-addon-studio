@@ -67,8 +67,10 @@ export interface Wrapper {
 export function findWrapper(content: string, range: SourceRange): Wrapper | null {
   const lines = toLines(content)
 
-  let above = range[0] - 1
-  while (above >= 0 && !lines[above].trim())
+  // A range can outlive the content it came from: a panel may still be showing
+  // the previous selection for a frame after an edit shortens the slide.
+  let above = Math.min(range[0], lines.length) - 1
+  while (above >= 0 && !lines[above]?.trim())
     above -= 1
   const open = above >= 0 ? lines[above].trim().match(RE_WRAPPER_OPEN) : null
   if (!open)

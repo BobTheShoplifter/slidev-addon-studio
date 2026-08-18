@@ -2,7 +2,7 @@ import type { ResolvedSlidevOptions } from '@slidev/types'
 import type { Plugin } from 'vite'
 import { join, relative } from 'node:path'
 import { buildCatalog } from './catalog'
-import { listAssets, saveAsset } from './assets'
+import { assetRoot, listAssets, saveAsset } from './assets'
 import { applyDeckAction } from './deck'
 
 const VIRTUAL_CATALOG = 'virtual:slidev-studio/catalog'
@@ -105,7 +105,7 @@ async function handle(route: string, method: string, req: any, options: Resolved
     return await buildCatalog(options)
 
   if (route === 'assets' && method === 'GET')
-    return { assets: await listAssets(options) }
+    return { assets: await listAssets(options), root: assetRoot(options) }
 
   if (route === 'assets' && method === 'POST')
     return await saveAsset(options, await readJson(req))

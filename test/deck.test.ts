@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { joinDeck, prettifyRaw, splitDeck } from '../node/slide-source'
-import { parseDocBlock, parseProps } from '../node/catalog'
+import { parseProps } from '../node/catalog'
+import { parseStudioBlock, parseUsageExample } from '../node/metadata'
 
 const DECK = `---
 theme: default
@@ -72,22 +73,69 @@ describe('prettifyRaw', () => {
 })
 
 describe('component metadata', () => {
-  it('reads the optional @studio block, including folded snippets', () => {
-    const meta = parseDocBlock([
+  it('reads the @studio block as YAML, nested props and all', () => {
+    const meta = parseStudioBlock([
       '<!-- @studio',
       'description: A rounded label',
       'category: Content',
       'snippet: |',
-      '  <Pill color="red">',
-      '    Label',
-      '  </Pill>',
+      '  <Pill color="red">Label</Pill>',
+      'props:',
+      '  name:',
+      '    label: Mascot',
+      '    options:',
+      "      files: ../assets/mascots/*.svg",
+      "      exclude: '*-stroke.svg'",
       '-->',
       '<template><span /></template>',
     ].join('\n'))
 
     expect(meta.description).toBe('A rounded label')
     expect(meta.category).toBe('Content')
-    expect(meta.snippet).toBe('<Pill color="red">\n  Label\n</Pill>')
+    expect(meta.snippet).toBe('<Pill color="red">Label</Pill>\n')
+    expect(meta.props?.name).toMatchObject({
+      label: 'Mascot',
+      options: { files: '../assets/mascots/*.svg', exclude: '*-stroke.svg' },
+    })
+  })
+
+  it('survives a malformed @studio block instead of failing the build', () => {
+    expect(parseStudioBlock('<!-- @studio\n  : : :\n-->')).toEqual({})
+    expect(parseStudioBlock('<template />')).toEqual({})
+  })
+
+  it('takes the usage example straight from the component doc comment', () => {
+    const code = [
+      '<script setup lang="ts">',
+      '/**',
+      " * BigCount - the talk's signature beat.",
+      ' *',
+      ' *   <BigCount :to="138723" label="Enheter" />',
+      ' *   <BigCount :to="316801418" label="Enheter og servere" />',
+      ' */',
+      '</script>',
+    ].join('\n')
+
+    expect(parseUsageExample(code, 'BigCount')).toBe('<BigCount :to="138723" label="Enheter" />')
+  })
+
+  it('follows a multi-line example to its closing tag', () => {
+    const code = [
+      '/**',
+      ' * Carousel',
+      ' *',
+      ' *   <Carousel :items="[',
+      " *     { src: '/a.png' },",
+      ' *   ]" />',
+      ' */',
+    ].join('\n')
+
+    expect(parseUsageExample(code, 'Carousel')).toBe('<Carousel :items="[\n  { src: \'/a.png\' },\n]" />')
+  })
+
+  it('reports no example rather than guessing', () => {
+    expect(parseUsageExample('/** Just prose. */', 'Pill')).toBeUndefined()
+    expect(parseUsageExample('no comment at all', 'Pill')).toBeUndefined()
   })
 
   it('extracts typed props and their string unions', () => {
@@ -103,7 +151,8 @@ describe('component metadata', () => {
     `)
 
     expect(props).toHaveLength(2)
-    expect(props[0]).toMatchObject({ name: 'color', required: false, default: 'red', options: ['red', 'green', 'ink'] })
+    expect(props[0]).toMatchObject({ name: 'color', required: false, default: 'red' })
+    expect(props[0].options?.map(o => o.value)).toEqual(['red', 'green', 'ink'])
     expect(props[1]).toMatchObject({ name: 'label', required: true })
   })
 

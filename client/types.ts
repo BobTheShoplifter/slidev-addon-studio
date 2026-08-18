@@ -49,6 +49,22 @@ export interface ClickConfig {
   motion?: string
 }
 
+export interface PropOption {
+  value: string
+  /** Thumbnail URL, when the options are backed by image files. */
+  preview?: string
+}
+
+export interface PropMeta {
+  name: string
+  type?: string
+  required?: boolean
+  default?: string
+  label?: string
+  options?: PropOption[]
+  hidden?: boolean
+}
+
 export interface CatalogComponent {
   name: string
   file: string
@@ -58,7 +74,7 @@ export interface CatalogComponent {
   category?: string
   snippet: string
   preview: string
-  props: { name: string, type?: string, required?: boolean, default?: string, options?: string[] }[]
+  props: PropMeta[]
   previewable: boolean
   load?: () => Promise<any>
 }
