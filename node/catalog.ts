@@ -68,6 +68,7 @@ const HIDDEN_BUILTINS = new Set([
   'SlidesTotal',
   'PoweredBySlidev',
   'TocList',
+  'katex-lines',
 ])
 
 /** Components that reach for the network or a heavy runtime in a 200px box. */
@@ -322,13 +323,54 @@ function parseDefaults(code: string): Record<string, string> {
   const match = code.match(/withDefaults\s*\([\s\S]*?,\s*\{([\s\S]*?)\}\s*,?\s*\)/)
   if (!match)
     return {}
+
   const defaults: Record<string, string> = {}
-  for (const line of match[1].split('\n')) {
-    const kv = line.match(/^\s*(\w+)\s*:\s*(.+?),?\s*$/)
+  for (const entry of splitTopLevel(match[1])) {
+    const kv = entry.match(/^\s*(\w+)\s*:\s*([\s\S]+?)\s*$/)
     if (kv)
       defaults[kv[1]] = kv[2].replace(/^['"]|['"]$/g, '')
   }
   return defaults
+}
+
+/**
+ * Splits an object body on its own commas.
+ *
+ * Reading defaults line by line was wrong: `{ label: 'Enheter', lead: 'Nå har
+ * jeg kontrollen over' }` is one line, and the label's default came out as
+ * everything after it.
+ */
+function splitTopLevel(body: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let quote: string | null = null
+  let start = 0
+
+  for (let i = 0; i < body.length; i++) {
+    const char = body[i]
+
+    if (quote) {
+      if (char === '\\')
+        i += 1
+      else if (char === quote)
+        quote = null
+      continue
+    }
+
+    if (char === '\'' || char === '"' || char === '`')
+      quote = char
+    else if ('([{'.includes(char))
+      depth += 1
+    else if (')]}'.includes(char))
+      depth -= 1
+    else if (char === ',' && depth === 0) {
+      parts.push(body.slice(start, i))
+      start = i + 1
+    }
+  }
+
+  parts.push(body.slice(start))
+  return parts.map(part => part.trim()).filter(Boolean)
 }
 
 function parseObjectProps(body: string): PropMeta[] {

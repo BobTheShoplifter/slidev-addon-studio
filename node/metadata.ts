@@ -137,8 +137,13 @@ function exampleFrom(comment: string | undefined, name: string): string | undefi
   for (let i = start; i < lines.length; i++) {
     collected.push(lines[i])
     const joined = collected.join('\n')
-    if (isBalanced(joined, name))
-      return canonicalise(dedent(collected).join('\n').trim(), name)
+    if (isBalanced(joined, name)) {
+      const example = canonicalise(dedent(collected).join('\n').trim(), name)
+      // Docs abbreviate: `:items="[{ … }, …]"` shows the shape without being
+      // valid JavaScript. Inserting that breaks the slide it lands on, with a
+      // 500 from the compiler, so an abbreviated example is no example at all.
+      return isCompilable(example) ? example : undefined
+    }
     // A single example should not run away with the whole comment.
     if (collected.length > 12)
       return undefined
@@ -146,12 +151,44 @@ function exampleFrom(comment: string | undefined, name: string): string | undefi
   return undefined
 }
 
+/**
+ * Whether the collected lines are a complete example.
+ *
+ * The self-closing test has to look at the example's own outer tag. Testing for
+ * a trailing `/>` anywhere stopped Transform's example at its first child,
+ * `<YourElements />`, and inserted an unclosed `<Transform>` that broke the
+ * slide it landed on.
+ */
 function isBalanced(text: string, name: string) {
-  if (/\/>\s*$/.test(text.trim()))
+  const outer = text.trim().match(new RegExp(`^<${name}\\b((?:"[^"]*"|'[^']*'|[^>"'])*?)(/?)>`, 'i'))
+  if (!outer)
+    return false
+  if (outer[2] === '/')
     return true
+
   const opens = text.match(new RegExp(`<${name}\\b`, 'gi'))?.length ?? 0
   const closes = text.match(new RegExp(`</${name}>`, 'gi'))?.length ?? 0
   return opens > 0 && opens === closes
+}
+
+/**
+ * Whether every binding in the example could actually be compiled.
+ *
+ * String literals are removed first, since an ellipsis inside one is ordinary
+ * text: `caption: '1 · …'` is fine, `[{ … }, …]` is not. Only single quotes and
+ * backticks are treated as literals, because in a template the double quotes
+ * delimit the attribute and the expression lives inside them.
+ */
+export function isCompilable(example: string): boolean {
+  const withoutStrings = example
+    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+    .replace(/`(?:[^`\\]|\\.)*`/g, '``')
+
+  if (/[…]/.test(withoutStrings))
+    return false
+  // A bare `...` only makes sense as a spread, which is always followed by a
+  // name, an object or an array.
+  return !/\.\.\.\s*[,\]}]/.test(withoutStrings)
 }
 
 function canonicalise(example: string, name: string) {

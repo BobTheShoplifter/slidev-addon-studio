@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CatalogComponent } from '../../types'
-import { compile, computed, defineComponent, shallowRef, watchEffect } from 'vue'
+import { compile, computed, defineComponent, h, shallowRef, watchEffect } from 'vue'
 
 /**
  * Renders the real component, not a screenshot, by compiling its example at
@@ -16,6 +16,11 @@ import { compile, computed, defineComponent, shallowRef, watchEffect } from 'vue
  * this component.
  */
 const props = defineProps<{ component: CatalogComponent }>()
+
+const PLACEHOLDER = defineComponent({
+  name: 'StudioPlaceholder',
+  render: () => h('span', { class: 'studio-card__placeholder' }, '…'),
+})
 
 const loaded = shallowRef<any>(null)
 
@@ -42,7 +47,13 @@ const preview = computed(() => {
       return null
     return defineComponent({
       name: `${props.component.name}Preview`,
-      components: { [props.component.name]: loaded.value },
+      // Documentation examples reference stand-ins, such as Transform's
+      // `<YourElements />`. Resolving anything unknown to a small placeholder
+      // keeps the preview honest and the console quiet.
+      components: new Proxy({ [props.component.name]: loaded.value }, {
+        get: (target, key: string) => target[key] ?? PLACEHOLDER,
+        has: () => true,
+      }) as any,
       render,
     })
   }

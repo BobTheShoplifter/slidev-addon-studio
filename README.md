@@ -315,6 +315,16 @@ pnpm test        # unit tests for the Markdown rewriting
 pnpm typecheck
 ```
 
+There is also an end to end pass over a real deck. It generates a slide per
+component from the catalog, then moves, animates and reconfigures each one,
+posting every edit and recompiling the slide, so markup the editor produces that
+Vue cannot compile fails here rather than in someone's deck:
+
+```bash
+slidev decks/qa-studio.md --port 3060
+STUDIO_QA_URL=http://localhost:3060 pnpm test
+```
+
 The Markdown rewriting lives in `client/md/` and `node/slide-source.ts` as pure
 functions with no DOM or Vue involved, which is where the tests are aimed.
 Anything that changes a user's file should be provable at that level first.

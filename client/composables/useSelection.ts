@@ -37,6 +37,26 @@ export function useSelection(
     return describe(el, no(), content())
   }
 
+  /**
+   * Finds a block by where the pointer is rather than by what it hit.
+   *
+   * An embedded frame swallows the pointer, so Studio turns pointer events off
+   * for embeds while it is open. That makes a component whose root *is* the
+   * frame, such as Youtube or Tweet, impossible to hit the ordinary way: the
+   * click passes straight through to the layout behind it. This picks the
+   * smallest mapped element that the point falls inside, among exactly those
+   * elements the editor made unhittable.
+   */
+  function targetFromPoint(x: number, y: number): StudioTarget | null {
+    const candidates = mappedElements(no())
+      .filter(el => getComputedStyle(el).pointerEvents === 'none')
+      .map(el => ({ el, box: el.getBoundingClientRect() }))
+      .filter(({ box }) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom)
+      .sort((a, b) => a.box.width * a.box.height - b.box.width * b.box.height)
+
+    return candidates.length ? describe(candidates[0].el, no(), content()) : null
+  }
+
   function select(node: EventTarget | null) {
     const target = targetFrom(node)
     if (target)
@@ -46,7 +66,7 @@ export function useSelection(
   onDomEvent<PointerEvent>(document, 'pointerdown', (event) => {
     if (!studioOpen.value || event.button !== 0 || editing.value)
       return
-    const target = targetFrom(event.target)
+    const target = targetFrom(event.target) ?? targetFromPoint(event.clientX, event.clientY)
     if (!target) {
       // Inside the slide but not on anything mapped: say so rather than
       // dropping the click without a word.
@@ -63,6 +83,9 @@ export function useSelection(
   onDomEvent<PointerEvent>(document, 'pointermove', (event) => {
     if (!studioOpen.value || editing.value)
       return
+    // Deliberately not the geometric fallback: hovering runs on every pointer
+    // move, and reading computed styles for a whole slide there is enough work
+    // to stall the renderer.
     hovered.value = targetFrom(event.target)
   }, { capture: true, passive: true })
 
@@ -71,7 +94,7 @@ export function useSelection(
   onDomEvent<MouseEvent>(document, 'dblclick', (event) => {
     if (!studioOpen.value)
       return
-    const target = targetFrom(event.target)
+    const target = targetFrom(event.target) ?? targetFromPoint(event.clientX, event.clientY)
     if (!target?.range)
       return
     event.preventDefault()

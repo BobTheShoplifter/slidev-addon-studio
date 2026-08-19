@@ -779,6 +779,19 @@
   --studio-deck-offset: 0px;
 }
 
+/*
+ * An embedded frame eats the pointer, so a Youtube, Tweet or BlueSky component
+ * could be seen but never selected or moved. While the editor is open the deck
+ * is a canvas, not a live page, so embeds stop taking the pointer and the
+ * component around them becomes clickable. Closing Studio gives them back.
+ */
+html.slidev-studio-docked #slide-content iframe,
+html.slidev-studio-docked #slide-content video,
+html.slidev-studio-docked #slide-content embed,
+html.slidev-studio-docked #slide-content object {
+  pointer-events: none;
+}
+
 html.slidev-studio-docked #page-root {
   transform: translateY(var(--studio-deck-offset)) scale(var(--studio-deck-scale));
   transform-origin: 0 0;
