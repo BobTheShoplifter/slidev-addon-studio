@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { PropControl, PropMeta } from '../../types'
 import { computed } from 'vue'
-import { formatStringArray, isArrayType, isColorValue, parseStringArray } from '../../md/literals'
+import { formatObjectArray, formatStringArray, isArrayType, isColorValue, parseObjectArray, parseStringArray } from '../../md/literals'
 import { isBoolean, isNumber, isTruthyDefault } from '../../md/props'
 import ColorSwatch from './ColorSwatch.vue'
 import ListField from './ListField.vue'
+import ObjectListField from './ObjectListField.vue'
 import StudioField from './StudioField.vue'
 
 /**
@@ -23,6 +24,16 @@ const current = computed(() => (props.value === null ? '' : String(props.value))
 const optionValues = computed(() => props.prop.options?.map(o => o.value) ?? [])
 
 const items = computed(() => parseStringArray(current.value) ?? defaultItems.value)
+
+/** Rows, when the value is a list of records rather than of strings. */
+const rows = computed(() => parseObjectArray(current.value) ?? defaultRows.value)
+
+const defaultRows = computed(() => {
+  if (current.value || !props.prop.default)
+    return null
+  const literal = props.prop.default.match(/\[[\s\S]*\]/)?.[0]
+  return literal ? parseObjectArray(literal) : null
+})
 
 // An unset boolean shows what the component will actually do, which for a prop
 // defaulting to true is "yes". Showing "no" made it look already off, and
@@ -59,10 +70,13 @@ const control = computed<PropControl>(() => {
   if (props.prop.options?.length)
     return 'select'
   if (isArrayType(props.prop.type)) {
-    // Rows only for a list of strings. An array of objects, such as a carousel's
-    // items, would have every row rewritten as a bare string.
     const element = (props.prop.type ?? '').replace(/\[\]$/, '').trim()
     const isStringList = element === 'string' || /^'/.test(element)
+
+    // A list of records is edited as rows of fields, which needs either rows to
+    // read or a declared shape to build one from.
+    if (!isStringList && (rows.value?.length || props.prop.fields?.length))
+      return 'object[]'
     if (!isStringList && !looksLikeColors.value)
       return 'text'
     return items.value ? (looksLikeColors.value ? 'color[]' : 'list') : 'text'
@@ -81,11 +95,23 @@ const hasThumbnails = computed(() => props.prop.options?.some(o => o.preview) ??
 function setList(next: string[]) {
   emit('change', formatStringArray(next))
 }
+
+function setRows(next: Record<string, string | number | boolean>[]) {
+  emit('change', formatObjectArray(next))
+}
 </script>
 
 <template>
+  <ObjectListField
+    v-if="control === 'object[]'"
+    :label="label"
+    :rows="rows ?? []"
+    :fields="prop.fields"
+    @change="setRows"
+  />
+
   <ListField
-    v-if="control === 'list' || control === 'color[]'"
+    v-else-if="control === 'list' || control === 'color[]'"
     :label="label"
     :items="items ?? []"
     :color="control === 'color[]'"

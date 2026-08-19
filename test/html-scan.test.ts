@@ -68,3 +68,26 @@ describe('scanTags', () => {
     expect(html.slice(0, tag.insertAt)).toBe('<div class="mt-8"')
   })
 })
+
+describe('multi-line tags', () => {
+  it('gives a tag that spans lines all of them', () => {
+    const html = [
+      '<LivePoll',
+      '  id="poll"',
+      '  :options="[',
+      "    'Yes',",
+      "    'No',",
+      '  ]"',
+      '/>',
+    ].join('\n')
+
+    const [tag] = scanTags(html)
+    expect(tag.name).toBe('LivePoll')
+    expect([tag.startLine, tag.endLine]).toEqual([0, 7])
+  })
+
+  it('still gives a single-line tag one line', () => {
+    const [tag] = scanTags('<Pill color="red">Hi</Pill>')
+    expect([tag.startLine, tag.endLine]).toEqual([0, 1])
+  })
+})

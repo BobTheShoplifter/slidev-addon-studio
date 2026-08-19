@@ -4,7 +4,8 @@ import { readClasses, writeClasses } from '../client/md/classes'
 import { formatPos, parsePos, readDrag, removeDrag, writeDrag } from '../client/md/drag'
 import { toggleBullet, toggleHeading, toggleQuote, toggleWrap, toLink } from '../client/md/format'
 import { formatValue, patchFrontmatterRaw } from '../client/md/frontmatter'
-import { formatStringArray, isArrayType, isColorValue, parseStringArray } from '../client/md/literals'
+import type { ObjectRow } from '../client/md/literals'
+import { formatObjectArray, formatStringArray, isArrayType, isColorValue, parseObjectArray, parseStringArray } from '../client/md/literals'
 import { getBlock, insertAfter, moveBlock, removeBlock, replaceBlock, unwrap } from '../client/md/lines'
 import { resolveRange } from '../client/md/locate'
 import { findAttr, firstTag, writeAttr } from '../client/md/tags'
@@ -380,5 +381,40 @@ describe('frontmatter', () => {
 
   it('starts a frontmatter block from nothing', () => {
     expect(patchFrontmatterRaw('', { layout: 'center' }).raw).toBe('layout: center')
+  })
+})
+
+describe('object arrays', () => {
+  it('reads rows of flat objects', () => {
+    expect(parseObjectArray("[{ date: '2023', text: 'One' }, { date: '2024', text: 'Two' }]")).toEqual([
+      { date: '2023', text: 'One' },
+      { date: '2024', text: 'Two' },
+    ])
+  })
+
+  it('reads numbers and booleans as themselves', () => {
+    expect(parseObjectArray("[{ cmd: 'nmap', ok: true, weight: 2 }]")).toEqual([
+      { cmd: 'nmap', ok: true, weight: 2 },
+    ])
+  })
+
+  it('survives commas and colons inside values', () => {
+    expect(parseObjectArray("[{ text: 'one, two: three' }]")).toEqual([{ text: 'one, two: three' }])
+  })
+
+  it('reports anything it cannot read rather than rewriting it', () => {
+    expect(parseObjectArray("[{ src: someVariable }]")).toBeNull()
+    expect(parseObjectArray("[{ nested: { a: 1 } }]")).toBeNull()
+    expect(parseObjectArray("['a string']")).toBeNull()
+    expect(parseObjectArray('not an array')).toBeNull()
+  })
+
+  it('round trips', () => {
+    const rows: ObjectRow[] = [{ cmd: 'nmap -sV', out: '...', ok: true }, { cmd: 'hydra', danger: true }]
+    expect(parseObjectArray(formatObjectArray(rows))).toEqual(rows)
+  })
+
+  it('drops empty fields rather than writing blanks', () => {
+    expect(formatObjectArray([{ date: '2024', text: '' }])).toBe("[\n  { date: '2024' },\n]")
   })
 })

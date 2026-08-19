@@ -438,10 +438,52 @@
   gap: 6px;
 }
 
+.studio-row {
+  padding: 6px;
+  margin-bottom: 6px;
+  background: var(--studio-bg);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+}
+
+.studio-row__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.studio-row__actions {
+  display: flex;
+  gap: 2px;
+}
+
+.studio-row .studio-icon-button {
+  width: 20px;
+  height: 20px;
+}
+
+.studio-row .studio-field__label {
+  flex: 0 0 66px;
+  font-size: 11px;
+}
+
+/* Native picker, opened from the swatch rather than shown beside it. */
+.studio-color__picker {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .studio-color__swatch {
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
   background: repeating-conic-gradient(#3a3b45 0% 25%, #2a2b34 0% 50%) 0 0 / 8px 8px;
   border: 1px solid var(--studio-border);
   border-radius: 4px;

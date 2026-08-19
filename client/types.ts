@@ -61,11 +61,18 @@ export interface PropOption {
   preview?: string
 }
 
-export type PropControl = 'text' | 'number' | 'boolean' | 'select' | 'list' | 'color' | 'color[]'
+export type PropControl = 'text' | 'number' | 'boolean' | 'select' | 'list' | 'color' | 'color[]' | 'object[]'
+
+export interface PropField {
+  name: string
+  type?: string
+}
 
 export interface PropMeta {
   name: string
   type?: string
+  /** For an array of records, the fields each row holds. */
+  fields?: PropField[]
   required?: boolean
   default?: string
   label?: string

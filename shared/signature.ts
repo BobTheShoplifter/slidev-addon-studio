@@ -11,6 +11,12 @@
 export function tagSignature(openingTag: string): string {
   const normalised = openingTag
     .replace(/\sdata-studio-[\w-]+="[^"]*"/g, '')
+    // Slidev's own `v-drag` support injects `:markdownSource` into the tag
+    // before this ever sees it, and that attribute exists nowhere in the file.
+    // Leaving it in meant every element gained a fingerprint its own source
+    // could not reproduce the moment it was moved, and the editor then refused
+    // to touch the thing it had just written.
+    .replace(/\s:?markdownSource="[^"]*"/g, '')
     // The two sides read the tag from different ends, so a self-closing slash
     // is present in one and not the other. Neither carries meaning here.
     .replace(/\/\s*>?\s*$/, '')

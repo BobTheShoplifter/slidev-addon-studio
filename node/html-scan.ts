@@ -63,11 +63,15 @@ export function scanTags(html: string): ScannedTag[] {
       continue
 
     const startLine = lineAt(html, match.index)
+    // An opening tag can span lines, which a list prop written one item per
+    // line does routinely. Its element owns at least those lines, or the editor
+    // would read back a fragment of its own markup.
+    const tagEndLine = lineAt(html, match.index + full.length)
     const tag: ScannedTag = {
       name,
       startLine,
-      // Until a closing tag says otherwise, an element owns its own line only.
-      endLine: startLine + 1,
+      // Until a closing tag says otherwise, an element owns only its own tag.
+      endLine: tagEndLine + 1,
       insertAt: match.index + 1 + name.length + attrs.length,
       attrs,
       selfClosing: selfClose === '/',

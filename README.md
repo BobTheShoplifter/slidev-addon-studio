@@ -204,12 +204,20 @@ the block existed.
 | `props.<name>.control` | Force a control: `text`, `number`, `boolean`, `select`, `list`, `color`, `color[]` |
 | `hidden: true` | Keep the component out of the palette, for one that is not meant to be written by hand |
 
-Controls are otherwise inferred. An array prop gets a list editor with add,
-remove and reorder; a string union gets a dropdown; a number is written bound as
-`:size="140"`. Colours are the exception: nothing about `string` says the string
-is a colour, so `control: color` or `control: color[]` is declared, and the
-inspector then shows swatches next to the values, including theme variables like
-`var(--flag-red)`.
+Controls are otherwise inferred. A string union gets a dropdown, a number is
+written bound as `:size="140"`, and an array gets an editor matched to what it
+holds:
+
+- a list of strings becomes rows with add, remove and reorder
+- a list of records, such as a timeline's entries or a terminal demo's steps,
+  becomes a row per entry with a field per key, typed from the element type the
+  component declares, so an empty list still knows what fields it wants
+- values that look like colours get swatches and a picker, which resolves a
+  theme variable such as `var(--flag-red)` to what it currently paints
+
+Colours are also inferred from the values themselves, so a palette prop is a
+colour editor without being declared. `control: color` or `control: color[]`
+covers a prop that has no value yet.
 
 Layouts are read the same way. A layout's props are the frontmatter keys it
 understands, so a slide like `layout: fact`, whose entire visible text lives in

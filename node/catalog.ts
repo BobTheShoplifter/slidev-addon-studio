@@ -1,10 +1,10 @@
 import type { ResolvedSlidevOptions } from '@slidev/types'
-import type { PropMeta, PropOption } from './metadata'
+import type { PropField, PropMeta, PropOption } from './metadata'
 import { readdir, readFile } from 'node:fs/promises'
 import { basename, extname, join, relative, resolve, sep } from 'node:path'
 import { parseStudioBlock, parseUsageExample, resolveOptions } from './metadata'
 
-export type { PropControl, PropMeta, PropOption } from './metadata'
+export type { PropControl, PropField, PropMeta, PropOption } from './metadata'
 
 export type ComponentSource = 'builtin' | 'theme' | 'addon' | 'project'
 
@@ -347,6 +347,11 @@ async function describeProps(code: string, file: string, meta: ReturnType<typeof
   const props = parseProps(code)
 
   for (const prop of props) {
+    // An array of records is editable as rows once the editor knows the fields.
+    const shape = shapeOf(prop, code)
+    if (shape)
+      prop.fields = shape
+
     const declared = meta.props?.[prop.name]
     if (!declared)
       continue
@@ -525,25 +530,42 @@ function parseObjectProps(body: string): PropMeta[] {
 }
 
 /**
+ * The fields of an array prop's element type.
+ *
+ * The prop parser collapses `{ src: string, caption?: string }` to `{…}` so its
+ * own splitting stays honest, so the shape is read from the source again here.
+ * An interface or type alias declared in the same file is followed too.
+ */
+export function shapeOf(prop: PropMeta, code: string): PropField[] | undefined {
+  if (!/\[\]$/.test(prop.type ?? ''))
+    return undefined
+
+  const element = (prop.type ?? '').replace(/\[\]$/, '').trim()
+  const body = code.match(new RegExp(`${prop.name}\\??\\s*:\\s*\\{([^}]*)\\}\\s*\\[\\]`))?.[1]
+    ?? (/^[A-Z]/.test(element)
+      ? code.match(new RegExp(`(?:interface|type)\\s+${element}\\s*=?\\s*\\{([^}]*)\\}`))?.[1]
+      : undefined)
+
+  if (!body)
+    return undefined
+
+  const fields = [...body.matchAll(/(\w+)\??\s*:\s*([^;,\n]+)/g)]
+    .map(([, name, type]) => ({ name, type: type.trim() }))
+
+  return fields.length ? fields : undefined
+}
+
+/**
  * One plausible entry for a required array prop, built from the element type
  * the component declares so the shape is right rather than merely non-empty.
  */
 function sampleItem(prop: PropMeta, code: string): string {
-  const element = (prop.type ?? '').replace(/\[\]$/, '').trim()
-
-  // `{ src: string, caption?: string }` was collapsed to `{…}` by the parser,
-  // so read the keys from the source instead.
-  const shape = code.match(new RegExp(`${prop.name}\\??\\s*:\\s*\\{([^}]*)\\}\\[\\]`))?.[1]
-    ?? (/^[A-Z]/.test(element) ? code.match(new RegExp(`(?:interface|type)\\s+${element}\\s*=?\\s*\\{([^}]*)\\}`))?.[1] : undefined)
-
-  if (!shape)
+  const fields = prop.fields ?? shapeOf(prop, code)
+  if (!fields?.length)
     return `'text'`
 
-  const keys = [...shape.matchAll(/(\w+)\??\s*:\s*([\w'|\s]+)/g)].slice(0, 3)
-  if (!keys.length)
-    return `'text'`
-
-  const entries = keys.map(([, key, type]) => `${key}: ${/number/.test(type) ? '1' : `'text'`}`)
+  const entries = fields.slice(0, 3).map(field =>
+    `${field.name}: ${/number/i.test(field.type ?? '') ? '1' : /boolean/i.test(field.type ?? '') ? 'true' : `'text'`}`)
   return `{ ${entries.join(', ')} }`
 }
 

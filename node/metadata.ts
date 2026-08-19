@@ -27,11 +27,18 @@ export interface PropOption {
  * Most are inferred from the prop's type. `color` and `color[]` are not, since
  * nothing in `string` says the string is a colour, so an author declares those.
  */
-export type PropControl = 'text' | 'number' | 'boolean' | 'select' | 'list' | 'color' | 'color[]'
+export type PropControl = 'text' | 'number' | 'boolean' | 'select' | 'list' | 'color' | 'color[]' | 'object[]'
+
+export interface PropField {
+  name: string
+  type?: string
+}
 
 export interface PropMeta {
   name: string
   type?: string
+  /** For an array of records, the fields each row holds. */
+  fields?: PropField[]
   required?: boolean
   default?: string
   /** Human label for the inspector; defaults to the prop name. */
