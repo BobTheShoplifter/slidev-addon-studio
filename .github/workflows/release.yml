@@ -55,5 +55,25 @@ jobs:
           fi
           npm --version
 
-      # No NODE_AUTH_TOKEN: the OIDC exchange above is the authentication.
+      # What npm will see. The trusted publisher entry on npmjs.com has to name
+      # exactly this repository and this workflow, so printing the claim turns
+      # "404 Not Found" from the registry, which is what it says when it will
+      # not accept the identity, into something you can act on. The token
+      # itself is never printed.
+      - name: Show the identity this job will publish with
+        run: |
+          claim="$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org" \
+            | node -e "
+              let raw = ''
+              process.stdin.on('data', d => raw += d).on('end', () => {
+                const token = JSON.parse(raw).value
+                const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
+                for (const key of ['repository', 'repository_owner', 'workflow_ref', 'ref'])
+                  console.log(key + ': ' + claims[key])
+              })
+            ")"
+          echo "$claim"
+
+      # No NODE_AUTH_TOKEN: the OIDC exchange is the authentication.
       - run: npm publish
