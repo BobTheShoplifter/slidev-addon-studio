@@ -42,20 +42,25 @@ function valueOf(prop: (typeof editableProps.value)[number]) {
 }
 
 /**
- * Bumped after every prop write so the fields are rebuilt from the source.
+ * Bumped when a prop write leaves the source untouched, to rebuild the fields.
  *
- * A write that changes nothing, such as clearing a prop the component requires,
- * leaves the source as it was, so Vue sees the same bound value and leaves the
- * field showing what was typed: the panel then claimed a value the deck does
- * not have.
+ * A refused write, such as clearing a prop the component requires, leaves the
+ * Markdown as it was, so Vue sees the same bound value and the field goes on
+ * showing what was typed: the panel then claims a value the deck does not have.
+ * Only that case rebuilds. Doing it after every write threw focus out of the
+ * form on each keystroke's worth of change, which stopped Tab walking it.
  */
 const revision = ref(0)
 
 async function setProp(prop: (typeof editableProps.value)[number], value: string | boolean | null) {
   if (!range.value)
     return
-  await studio.commit(writeProp(studio.content(), range.value, prop, value), `Set ${prop.name}`)
-  revision.value += 1
+
+  const before = studio.content()
+  const next = writeProp(before, range.value, prop, value)
+  await studio.commit(next, `Set ${prop.name}`)
+  if (next === before)
+    revision.value += 1
 }
 const block = computed(() => (range.value ? getBlock(studio.content(), range.value) : ''))
 const drag = computed(() => (range.value ? readDrag(studio.content(), range.value) : null))

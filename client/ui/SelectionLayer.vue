@@ -125,6 +125,10 @@ function style(rect: Rect) {
     top: `${rect.top}px`,
     width: `${rect.width}px`,
     height: `${rect.height}px`,
+    // A turned block needs a turned outline here too, or hovering one draws an
+    // upright box beside it.
+    transform: rect.rotate ? `rotate(${rect.rotate}deg)` : undefined,
+    transformOrigin: rect.rotate ? 'center center' : undefined,
   }
 }
 
