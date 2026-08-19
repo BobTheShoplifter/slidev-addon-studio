@@ -67,14 +67,14 @@ export function useSlideCanvas(zoom: () => number = () => 1) {
    * Deliberately not the bounding rect's width and height: for a rotated
    * element that is the axis-aligned box *containing* the rotation, which is
    * larger than the element. Measuring it and writing it back as the size grew
-   * the element on every gesture. The layout size does not rotate, so it is
-   * taken from there and the rect is used only to locate the centre.
+   * the element on every gesture. The used size does not rotate, so it is taken
+   * from there and the rect is used only to locate the centre.
    */
   function boxOf(target: Element) {
     const box = target.getBoundingClientRect()
-    const layout = target as HTMLElement
-    const w = layout.offsetWidth || box.width / scale.value
-    const h = layout.offsetHeight || box.height / scale.value
+    const style = getComputedStyle(target)
+    const w = usedSize(style, 'width') || box.width / scale.value
+    const h = usedSize(style, 'height') || box.height / scale.value
     return {
       x: (box.left + box.width / 2 - rect.value.left) / scale.value - w / 2,
       y: (box.top + box.height / 2 - rect.value.top) / scale.value - h / 2,
@@ -84,4 +84,28 @@ export function useSlideCanvas(zoom: () => number = () => 1) {
   }
 
   return { el, rect, scale, slideWidth, slideHeight, toCanvas, toScreen, boxOf }
+}
+
+/**
+ * An element's border box along one axis, in layout pixels.
+ *
+ * `offsetWidth` would do but it is an integer, and a block sized to its own
+ * content is a fraction wider than the integer below it. Rounding that away
+ * made a heading wrap onto a second line the moment it was given a position.
+ */
+function usedSize(style: CSSStyleDeclaration, axis: 'width' | 'height'): number {
+  const size = Number.parseFloat(style[axis])
+  if (!Number.isFinite(size))
+    return 0
+  // A border-box element already reports the whole box; a content-box one
+  // reports only the content, so its padding and border are added back.
+  if (style.boxSizing === 'border-box')
+    return size
+
+  const sides = axis === 'width' ? ['Left', 'Right'] as const : ['Top', 'Bottom'] as const
+  return sides.reduce((total, side) => {
+    const padding = Number.parseFloat(style[`padding${side}` as 'paddingLeft']) || 0
+    const border = Number.parseFloat(style[`border${side}Width` as 'borderLeftWidth']) || 0
+    return total + padding + border
+  }, size)
 }

@@ -14,6 +14,14 @@ import { findAttr, opensWithTag, writeAttr } from './tags'
  * `_` (component form) or `NaN` (directive form) means "size to content".
  */
 
+/**
+ * Slidev renders `<v-drag>` as `<div class="p-1">`, so the element inside it
+ * has four units less on every side than the `pos` says. A block measured at
+ * its natural width and written back verbatim therefore came out too narrow:
+ * a heading that filled one line wrapped onto two the moment it was dragged.
+ */
+export const DRAG_WRAPPER_PADDING = 4
+
 const RE_DRAG_OPEN = /^<v-drag((?:"[^"]*"|'[^']*'|[^>"'])*)>$/
 const RE_DRAG_CLOSE = /^<\/v-drag>$/
 
@@ -37,7 +45,10 @@ export function parsePos(raw: string | null | undefined): DragPos | null {
 
 export function formatPos(pos: DragPos, style: 'attr' | 'prop'): string {
   const auto = style === 'attr' ? 'NaN' : '_'
-  const parts = [Math.round(pos.x), Math.round(pos.y), Math.round(pos.w), pos.h === null ? auto : Math.round(pos.h)]
+  // Width and height round up. An element sized to its own content is a
+  // fraction of a pixel wider than the integer below it, and losing that
+  // fraction is the difference between one line of text and two.
+  const parts = [Math.round(pos.x), Math.round(pos.y), Math.ceil(pos.w), pos.h === null ? auto : Math.ceil(pos.h)]
   if (Math.round(pos.rotate) !== 0)
     parts.push(Math.round(pos.rotate))
   const body = parts.join(',')

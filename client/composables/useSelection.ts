@@ -1,5 +1,5 @@
 import type { SourceRange, StudioTarget, TargetKind } from '../types'
-import { nextTick, watch } from 'vue'
+import { nextTick, onScopeDispose, watch, watchEffect } from 'vue'
 import { removeBlock } from '../md/lines'
 import { belongsToSlide, mappedElements, slideElement } from '../dom'
 import { onDomEvent } from './useDomEvent'
@@ -15,6 +15,21 @@ import { editing, hovered, missed, selection, studioOpen } from '../state'
  * `md/locate.ts`, because editing the wrong lines is the one mistake that
  * would cost a user their deck.
  */
+
+/**
+ * Studio's own chrome: the dock, the selection overlay, the handles, the inline
+ * editor. All of it is teleported to `body`, so a press on it is not a click on
+ * the slide and must not be claimed here.
+ *
+ * Claiming it was the cause of three separate complaints: a press on the move
+ * overlay or on the east, south-east and south handles was swallowed before the
+ * handle's own listener could run, so every other drag did nothing; and a
+ * double click on a selected block landed on the overlay covering it, so
+ * editing text could not be started at all once something was selected.
+ */
+function isStudioChrome(target: EventTarget | null): target is Element {
+  return target instanceof Element && !!target.closest('.slidev-studio')
+}
 
 export function useSelection(
   no: () => number,
@@ -71,6 +86,9 @@ export function useSelection(
   onDomEvent<PointerEvent>(document, 'pointerdown', (event) => {
     if (!studioOpen.value || event.button !== 0 || editing.value)
       return
+    // The overlay and the handles handle themselves.
+    if (isStudioChrome(event.target))
+      return
     const target = targetFrom(event.target) ?? targetFromPoint(event.clientX, event.clientY)
     if (!target) {
       // Inside the slide but not on anything mapped: say so rather than
@@ -88,6 +106,10 @@ export function useSelection(
   onDomEvent<PointerEvent>(document, 'pointermove', (event) => {
     if (!studioOpen.value || editing.value)
       return
+    // Hovering over the editor's own chrome is not hovering over the slide, and
+    // clearing the outline there made the selection flicker under the pointer.
+    if (isStudioChrome(event.target))
+      return
     // Deliberately not the geometric fallback: hovering runs on every pointer
     // move, and reading computed styles for a whole slide there is enough work
     // to stall the renderer.
@@ -99,6 +121,21 @@ export function useSelection(
   onDomEvent<MouseEvent>(document, 'dblclick', (event) => {
     if (!studioOpen.value)
       return
+
+    // The first click of a double click selects, which lays the move overlay
+    // over the block, so the second click lands on the overlay rather than on
+    // the text. Editing the selection is exactly what was asked for.
+    if (event.target instanceof Element && event.target.closest('.studio-move')) {
+      if (!selection.value?.range)
+        return
+      event.preventDefault()
+      editing.value = true
+      return
+    }
+
+    if (isStudioChrome(event.target))
+      return
+
     const target = targetFrom(event.target) ?? targetFromPoint(event.clientX, event.clientY)
     if (!target?.range)
       return
@@ -143,24 +180,69 @@ export function useSelection(
    */
   async function reselect(hint: SourceRange | null, kind: TargetKind, tag?: string) {
     await nextTick()
-    await new Promise(resolve => setTimeout(resolve, 80))
 
-    if (!hint || !slideElement(no()))
+    // A re-render can land a frame or several later, and binding to whatever is
+    // there at a fixed delay bound the selection to the element that was about
+    // to be thrown away: the outline vanished and the next press went to the
+    // slide instead of to the overlay, so every other drag did nothing. Waiting
+    // for an element that is actually on screen is the whole fix.
+    const deadline = Date.now() + 1200
+    let best: HTMLElement | undefined
+
+    while (Date.now() < deadline) {
+      if (!hint || !slideElement(no()))
+        return
+
+      const candidates = mappedElements(no())
+        .filter(el => (el.dataset.studioKind ?? 'unknown') === kind && el.dataset.studioTag === tag)
+        .filter(el => document.contains(el) && el.getBoundingClientRect().width > 0)
+
+      best = candidates
+        .map(el => ({ el, start: parseHint(el.dataset.studioSrc)?.[0] ?? Number.POSITIVE_INFINITY }))
+        .sort((a, b) => Math.abs(a.start - hint[0]) - Math.abs(b.start - hint[0]))[0]?.el
+
+      if (best)
+        break
+      await new Promise(resolve => setTimeout(resolve, 40))
+    }
+
+    // Keep what the user had if the element cannot be found at all. An edit
+    // that briefly cannot be rebound used to empty the whole panel, which read
+    // as the editor losing the thing you were working on.
+    if (best)
+      selection.value = describe(best, no(), content())
+  }
+
+  /**
+   * Rebinds the selection when the slide is re-rendered under it.
+   *
+   * Any rebuild replaces the DOM, and the selection then points at a node that
+   * is no longer on screen: the outline and the handles disappear, and the next
+   * press lands on the slide rather than on them. That happens on every edit
+   * the editor makes, and also when the author edits the Markdown by hand.
+   */
+  let rebinding = false
+  let observer: MutationObserver | null = null
+
+  watchEffect(() => {
+    observer?.disconnect()
+    observer = null
+
+    const root = studioOpen.value ? slideElement(no()) : null
+    if (!root)
       return
 
-    const candidates = mappedElements(no())
-      .filter(el => (el.dataset.studioKind ?? 'unknown') === kind && el.dataset.studioTag === tag)
+    observer = new MutationObserver(() => {
+      const current = selection.value
+      if (rebinding || !current || document.contains(current.el))
+        return
+      rebinding = true
+      reselect(current.range, current.kind, current.tag).finally(() => (rebinding = false))
+    })
+    observer.observe(root, { childList: true, subtree: true })
+  })
 
-    const best = candidates
-      .map(el => ({ el, start: parseHint(el.dataset.studioSrc)?.[0] ?? Number.POSITIVE_INFINITY }))
-      .sort((a, b) => Math.abs(a.start - hint[0]) - Math.abs(b.start - hint[0]))[0]
-
-    // Keep what the user had if the element cannot be found this instant. An
-    // edit that briefly cannot be rebound used to empty the whole panel, which
-    // read as the editor losing the thing you were working on.
-    if (best)
-      selection.value = describe(best.el, no(), content())
-  }
+  onScopeDispose(() => observer?.disconnect())
 
   /**
    * Selects a block that was just inserted.

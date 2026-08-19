@@ -105,8 +105,13 @@ function handleStyle(rect: Rect, handle: typeof handles[number]) {
         {{ selection.label }}{{ selection.positioned ? ' · free' : '' }}
       </div>
 
-      <!-- The body of the selection is the move handle. -->
+      <!--
+        The body of the selection is the move handle. It is named so a double
+        click landing on it can be understood as a double click on the block it
+        covers, which is what the user aimed at.
+      -->
       <div
+        class="studio-move"
         :style="{ ...style(selectionRect), position: 'fixed', cursor: 'move', pointerEvents: 'auto' }"
         @pointerdown="studio.gizmo.startMove($event)"
       />

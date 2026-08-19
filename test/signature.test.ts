@@ -31,4 +31,17 @@ describe('tagSignature', () => {
   it('ignores whitespace differences', () => {
     expect(tagSignature('<Pill  color="red" ')).toBe(tagSignature('<Pill color="red"'))
   })
+
+  it('ignores a position, which moving changes and identity does not', () => {
+    // A drag paints its own result and skips the re-render, so the DOM keeps
+    // the fingerprint of the tag as it was written before the move.
+    expect(tagSignature('<Youtube id="x" v-drag="[54,114,662,238,27]" />'))
+      .toBe(tagSignature('<Youtube id="x" v-drag="[54,114,662,238]" />'))
+    expect(tagSignature('<Youtube id="x" v-drag="[1,2,3]" />'))
+      .toBe(tagSignature('<Youtube id="x" />'))
+    // Anything else about the tag still tells two elements apart.
+    expect(tagSignature('<Youtube id="x" v-drag="[1,2,3]" />'))
+      .not.toBe(tagSignature('<Youtube id="y" v-drag="[1,2,3]" />'))
+  })
 })
+

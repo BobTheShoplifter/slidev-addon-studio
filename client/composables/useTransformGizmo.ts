@@ -4,7 +4,7 @@ import type { useSlideCanvas } from './useSlideCanvas'
 import { ref, shallowRef } from 'vue'
 import { mappedElements } from '../dom'
 import { onDomEvent } from './useDomEvent'
-import { readDrag, writeDrag } from '../md/drag'
+import { DRAG_WRAPPER_PADDING, readDrag, writeDrag } from '../md/drag'
 import { gridEnabled, gridSize, snapEnabled } from '../state'
 import { snapBox } from './useSnapping'
 
@@ -56,6 +56,10 @@ export function useTransformGizmo(context: {
   let hadPosition = false
   let startRotate = 0
   let autoHeight = true
+  /** The position will be written as a `<v-drag>` wrapper around the block. */
+  let wrapped = false
+  /** Units the written box has that the painted element does not. */
+  let padding = 0
   let pointerStart = { x: 0, y: 0 }
   let others: Box[] = []
   let painted: HTMLElement | null = null
@@ -76,7 +80,19 @@ export function useTransformGizmo(context: {
 
     const existing = readDrag(context.getContent(), current.range)
     hadPosition = !!existing
-    startBox = canvas.boxOf(current.el)
+    // Elements and components take the directive and are positioned directly;
+    // a Markdown block gets a wrapper, whose padding sits outside it.
+    wrapped = existing ? existing.via === 'wrapper' : !current.tag
+
+    // A block that is already wrapped is moved and measured by its container,
+    // whose box already includes the wrapper's own padding. A block being
+    // positioned for the first time has no container yet, so it is measured as
+    // it stands and the padding the wrapper will add is accounted for on write.
+    const container = wrapped && hadPosition ? positionedWrapper(current.el) : null
+    painted = container ?? current.el
+    padding = container ? 0 : (wrapped ? DRAG_WRAPPER_PADDING : 0)
+
+    startBox = canvas.boxOf(painted)
     startRotate = existing?.pos?.rotate ?? 0
     autoHeight = existing?.pos ? existing.pos.h === null : true
     pointerStart = { x: event.clientX, y: event.clientY }
@@ -84,7 +100,6 @@ export function useTransformGizmo(context: {
 
     startNo = current.no
     others = collectOthers(current.el, current.no)
-    painted = current.el
     restore = painted.getAttribute('style') ?? ''
   }
 
@@ -202,13 +217,16 @@ export function useTransformGizmo(context: {
     guides.value = []
     gesture = null
 
+    // Only when the wrapper does not exist yet does the written box need to
+    // grow by the padding it will add.
+    const pad = padding
     const pos: DragPos = {
-      x: box.x,
-      y: box.y,
-      w: box.w,
+      x: box.x - pad,
+      y: box.y - pad,
+      w: box.w + pad * 2,
       // A resize that touched a vertical edge fixes the height; otherwise the
       // element keeps sizing itself, which is what authors usually want.
-      h: autoHeight && !changedHeight ? null : box.h,
+      h: autoHeight && !changedHeight ? null : box.h + pad * 2,
       rotate: startRotate,
     }
 
@@ -256,6 +274,25 @@ export function useTransformGizmo(context: {
     target = null
     painted = null
   })
+
+  /**
+   * The element Slidev positions for a wrapped block, if it is on screen.
+   *
+   * `<v-drag>` renders a container around the block and puts `position:
+   * absolute` and the coordinates on that. Painting the block instead left the
+   * slide showing the old position while the file held the new one, and
+   * measuring the block instead squeezed the container to the block's width,
+   * which wrapped the text onto a second line.
+   */
+  function positionedWrapper(el: HTMLElement): HTMLElement | null {
+    let node: HTMLElement | null = el.parentElement
+    for (let depth = 0; node && depth < 3; depth++) {
+      if (getComputedStyle(node).position === 'absolute')
+        return node
+      node = node.parentElement
+    }
+    return null
+  }
 
   /**
    * Keeps a sliver of the element on the canvas. An element dropped entirely

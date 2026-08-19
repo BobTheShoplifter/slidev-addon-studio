@@ -17,6 +17,12 @@ export function tagSignature(openingTag: string): string {
     // could not reproduce the moment it was moved, and the editor then refused
     // to touch the thing it had just written.
     .replace(/\s:?markdownSource="[^"]*"/g, '')
+    // A position is state, not identity. A drag that writes `pos` without
+    // re-rendering the slide leaves the DOM holding the fingerprint of the
+    // tag as it was, and the element could never be selected again: it had
+    // been renamed by moving it. Both sides ignore it, so it survives.
+    .replace(/\sv-drag(?:="[^"]*")?/g, '')
+    .replace(/\s:?pos="[^"]*"/g, '')
     // The two sides read the tag from different ends, so a self-closing slash
     // is present in one and not the other. Neither carries meaning here.
     .replace(/\/\s*>?\s*$/, '')
