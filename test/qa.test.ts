@@ -45,12 +45,36 @@ async function write(no: number, content: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),
   })
+  // The endpoint returns once the file is written; invalidating the module is
+  // the watcher's job and happens a moment later. Recompiling before that would
+  // read the previous transform and pass no matter what was written.
+  await new Promise(resolve => setTimeout(resolve, 400))
 }
 
-/** Recompiles the slide, which is where invalid markup shows up. */
+/**
+ * Recompiles the slide, which is where invalid markup shows up.
+ *
+ * The module id has to be resolved rather than guessed. A path-prefixed guess
+ * such as `/decks/qa-studio.md__slidev_3.md` resolves to a *different* Vite
+ * module that nothing ever invalidates, so it answers 200 with a transform from
+ * the start of the session forever, and this check silently passes whatever it
+ * is given. Slidev's own `/@slidev/slides/<no>/md` re-exports the real id.
+ */
 async function compiles(no: number) {
-  const response = await fetch(`${BASE}/decks/qa-studio.md__slidev_${no}.md?import&t=${Date.now()}`)
-  return response.status === 200
+  const wrapper = await fetch(`${BASE}/@slidev/slides/${no}/md?t=${Date.now()}`).then(r => r.text())
+  const id = wrapper.match(/export \* from "([^"]+)"/)?.[1]
+  if (!id)
+    throw new Error(`Could not resolve the module for slide ${no}`)
+
+  const url = new URL(id, BASE)
+  url.searchParams.set('t', String(Date.now()))
+  const response = await fetch(url)
+  if (!response.ok)
+    return false
+
+  // A miss falls through to the SPA shell, which is a 200 that proves nothing.
+  const body = await response.text()
+  return !body.trimStart().startsWith('<')
 }
 
 /** The line the component's opening tag sits on. */
@@ -132,4 +156,21 @@ suite('every component can be moved, configured and animated', async () => {
       })
     }
   }
+})
+
+suite('the compile check itself', () => {
+  it('fails a slide whose markup cannot compile', async () => {
+    const deck = await slides()
+    const target = deck[1]
+    const original = target.content
+
+    await write(target.no, '\n## Broken\n\n<Youtube :id="{{{" />\n')
+    const result = await compiles(target.no)
+    await write(target.no, original)
+
+    // If this passes, the check is reading a stale module and every other
+    // assertion that relies on it is worthless.
+    expect(result).toBe(false)
+    expect(await compiles(target.no)).toBe(true)
+  })
 })

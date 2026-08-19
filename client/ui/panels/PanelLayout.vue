@@ -32,9 +32,13 @@ const layoutProps = computed(() => {
 /** Keys Slidev owns, already offered below under Slide. */
 const RESERVED = new Set(['title', 'class', 'clicks', 'hide', 'level', 'layout', 'transition', 'zoom', 'preload', 'src', 'routeAlias'])
 
-function propValue(name: string) {
+function propValue(name: string): string | boolean | null {
   const value = frontmatter.value[name]
-  return value === undefined || value === null ? null : String(value)
+  if (value === undefined || value === null)
+    return null
+  // Booleans must stay booleans: stringified, `stroke: true` read as the text
+  // "true", the control showed "No", and choosing "No" changed nothing.
+  return typeof value === 'boolean' ? value : String(value)
 }
 
 async function setProp(prop: { name: string, type?: string }, value: string | boolean | null) {

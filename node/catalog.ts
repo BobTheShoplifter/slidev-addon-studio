@@ -69,7 +69,32 @@ const HIDDEN_BUILTINS = new Set([
   'PoweredBySlidev',
   'TocList',
   'katex-lines',
+  // Slidev emits these from a fenced code block and says so in their own
+  // headers. A bare tag either crashes, `<Monaco />` decompresses an empty
+  // payload and throws, or renders an error box from a stub payload.
+  'Monaco',
+  'Mermaid',
+  'PlantUml',
 ])
+
+/**
+ * Layouts that exist for Slidev's own error states. Neither renders a slot, so
+ * choosing one silently discards everything on the slide.
+ */
+const HIDDEN_LAYOUTS = new Set(['404', 'error'])
+
+/**
+ * Snippets for components whose real usage cannot be derived from their props.
+ * SlidevVideo takes its media from slot content, so every generated form of it
+ * is an empty player.
+ */
+const BUILTIN_SNIPPETS: Record<string, string> = {
+  // The source is bound rather than written as a plain attribute on purpose.
+  // Vue turns `src` on a real HTML element into an asset import, so a file the
+  // author has not added yet would fail the build instead of simply showing a
+  // missing video. Bound, it stays a runtime URL.
+  SlidevVideo: '<SlidevVideo autoplay controls>\n  <source :src="\'/video.mp4\'" type="video/mp4" />\n</SlidevVideo>',
+}
 
 /** Components that reach for the network or a heavy runtime in a 200px box. */
 const NO_PREVIEW = new Set(['Monaco', 'Mermaid', 'PlantUml', 'Tweet', 'Youtube', 'BlueSky', 'SlidevVideo', 'Toc'])
@@ -119,23 +144,49 @@ export async function buildCatalog(options: ResolvedSlidevOptions): Promise<Cata
   const layouts: LayoutEntry[] = []
   const layoutPaths = await utils.getLayouts()
   for (const [name, file] of Object.entries(layoutPaths)) {
+    if (HIDDEN_LAYOUTS.has(name))
+      continue
     const { source, origin } = classify(file, options)
     let description: string | undefined
     let props: PropMeta[] = []
     try {
       const code = await readFile(file, 'utf-8')
       const meta = parseStudioBlock(code)
-      description = meta.description
+      description = meta.description ?? describeFromDoc(code)
       props = await describeProps(code, file, meta)
     }
     catch {}
     layouts.push({ name, file, source, origin, description, props })
   }
 
+  // Documentation examples reference stand-ins that are not real components,
+  // such as Transform's `<YourElements />`. Inserting one warns at runtime and
+  // renders nothing, so it becomes plain text the author can replace.
+  const known = new Set(components.map(c => c.name))
+  for (const component of components) {
+    component.snippet = replaceUnknownTags(component.snippet, known, component.name)
+    component.preview = replaceUnknownTags(component.preview, known, component.name)
+  }
+
   components.sort((a, b) => a.name.localeCompare(b.name))
   layouts.sort((a, b) => a.name.localeCompare(b.name))
 
   return { components, layouts }
+}
+
+const RE_ANY_TAG = /<\/?([A-Za-z][\w.-]*)((?:"[^"]*"|'[^']*'|[^>"'])*?)\/?>/g
+
+function replaceUnknownTags(markup: string, known: Set<string>, self: string): string {
+  return markup.replace(RE_ANY_TAG, (full, tag: string) => {
+    // Lowercase tags are HTML, and a component that exists is fine as it is.
+    if (!/^[A-Z]/.test(tag) || tag === self || known.has(tag))
+      return full
+    if (full.startsWith('</'))
+      return ''
+    // `<YourElements />` reads as "Your elements", which is what the doc meant.
+    const words = tag.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()
+    return words.charAt(0).toUpperCase() + words.slice(1)
+  })
 }
 
 function originOf(root: string) {
@@ -188,9 +239,15 @@ async function readComponent(file: string, name: string, source: ComponentSource
   if (meta.hidden)
     return null
 
+  // Vue drops fallthrough attributes on a component with several root nodes, so
+  // such a component never receives its source annotation and is invisible to
+  // the editor however it is inserted. Offering it would only mislead.
+  if (extname(file) === '.vue' && !hasSingleRoot(code))
+    return null
+
   const props = extname(file) === '.vue' ? await describeProps(code, file, meta) : []
   const example = parseUsageExample(code, name)
-  const snippet = meta.snippet ?? example ?? defaultSnippet(name, props, /<slot\b/.test(code))
+  const snippet = meta.snippet ?? BUILTIN_SNIPPETS[name] ?? example ?? defaultSnippet(name, props, code)
 
   // Only render a preview we can trust. A component with required props and no
   // example would be handed empty stand-ins, which is how a palette ends up
@@ -218,20 +275,72 @@ async function readComponent(file: string, name: string, source: ComponentSource
   }
 }
 
-/** First prose line of the component's doc comment, if it reads like a summary. */
+/**
+ * Counts the root nodes of an SFC template.
+ *
+ * Conservative on purpose: anything it cannot read confidently is treated as a
+ * single root, so a parsing gap hides nothing that works.
+ */
+export function hasSingleRoot(code: string): boolean {
+  const template = code.match(/<template>([\s\S]*?)<\/template>\s*(?:<script|<style|$)/)?.[1]
+  if (!template)
+    return true
+
+  let depth = 0
+  let roots = 0
+  let sawBranch = false
+
+  const tags = template.replace(/<!--[\s\S]*?-->/g, '').matchAll(/<(\/?)([A-Za-z][\w.-]*)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>/g)
+  for (const [, closing, , attrs, selfClose] of tags) {
+    if (closing) {
+      depth -= 1
+      continue
+    }
+    if (depth === 0) {
+      // `v-else` continues the previous root rather than adding one.
+      if (/\sv-else\b|\sv-else-if[=\s]/.test(attrs))
+        sawBranch = true
+      else
+        roots += 1
+    }
+    if (!selfClose)
+      depth += 1
+  }
+
+  return roots <= 1 || (sawBranch && roots <= 2)
+}
+
+/** Opening prose of the component's doc comment, if it reads like a summary. */
 function describeFromDoc(code: string): string | undefined {
-  const comment = code.match(/\/\*\*([\s\S]*?)\*\//)?.[1]
+  // Only the part before the template: a `/* … */` inside <style> is CSS, and
+  // taking it made Monaco's description read "Revert styles".
+  const head = code.split(/<template[\s>]/)[0]
+  const comment = head.match(/\/\*\*([\s\S]*?)\*\//)?.[1] ?? head.match(/<!--(?!\s*@studio)([\s\S]*?)-->/)?.[1]
   if (!comment)
     return undefined
+
+  const prose: string[] = []
   for (const raw of comment.split('\n')) {
     const line = raw.replace(/^\s*\* ?/, '').trim()
-    if (!line || line.startsWith('<') || line.startsWith('@'))
+    if (!line || line.startsWith('<') || line.startsWith('@')) {
+      if (prose.length)
+        break
       continue
-    // `Name — what it does` and `Name - what it does` both read as a summary.
-    const summary = line.replace(/^\w+\s*[-–—:]\s*/, '')
-    return summary.length > 120 ? `${summary.slice(0, 117)}…` : summary
+    }
+    prose.push(line)
+    if (/[.!?]$/.test(line))
+      break
   }
-  return undefined
+
+  if (!prose.length)
+    return undefined
+
+  // `Name — what it does` and `Name - what it does` both read as a summary.
+  const summary = prose.join(' ').replace(/^\w+\s*[-–—:]\s*/, '')
+  if (summary.length <= 120)
+    return summary
+  const cut = summary.slice(0, 117)
+  return `${cut.slice(0, cut.lastIndexOf(' ') + 1 || cut.length).trim()}…`
 }
 
 async function describeProps(code: string, file: string, meta: ReturnType<typeof parseStudioBlock>): Promise<PropMeta[]> {
@@ -279,7 +388,7 @@ const RE_WITH_DEFAULTS = /withDefaults\s*\(\s*defineProps/
 export function parseProps(code: string): PropMeta[] {
   const typeMatch = code.match(RE_DEFINE_PROPS_TYPE)
   if (typeMatch)
-    return parseTypeProps(typeMatch[1], RE_WITH_DEFAULTS.test(code) ? parseDefaults(code) : {})
+    return parseTypeProps(typeMatch[1], RE_WITH_DEFAULTS.test(code) ? parseDefaults(code) : {}, code)
 
   const objectMatch = code.match(RE_DEFINE_PROPS_OBJECT)
   if (objectMatch)
@@ -292,24 +401,43 @@ export function parseProps(code: string): PropMeta[] {
   return []
 }
 
-function parseTypeProps(body: string, defaults: Record<string, string>): PropMeta[] {
+function parseTypeProps(body: string, defaults: Record<string, string>, code = ''): PropMeta[] {
   const props: PropMeta[] = []
-  // Strip nested object/function types so a naive split stays honest.
-  const flat = body.replace(/\{[^{}]*\}/g, '{…}')
-  for (const line of flat.split(/[\n;,]/)) {
-    const match = line.match(/^\s*(\w+)(\?)?\s*:\s*(.+?)\s*$/)
+  // Comments first: a trailing `// values: 'a', 'b'` was being read as part of
+  // the type, and then shown to the user as the field's placeholder.
+  const cleaned = body.replace(/\/\/[^\n]*/g, '')
+  // Nested object types collapse so they cannot be mistaken for structure, but
+  // the split itself respects brackets, so `Record<string, unknown>` survives.
+  const flat = cleaned.replace(/\{[^{}]*\}/g, '{…}')
+
+  for (const entry of splitTopLevel(flat.replace(/[\n;]/g, ','))) {
+    const match = entry.match(/^\s*(\w+)(\?)?\s*:\s*([\s\S]+?)\s*$/)
     if (!match)
       continue
-    const [, name, optional, type] = match
+    const [, name, optional, rawType] = match
+    const type = rawType.trim()
     props.push({
       name,
-      type: type.trim(),
+      type,
       required: !optional,
       default: defaults[name],
-      options: parseStringUnion(type),
+      options: parseStringUnion(type) ?? parseStringUnion(resolveAlias(type, code)),
     })
   }
   return props
+}
+
+/**
+ * Follows a type alias declared in the same file.
+ *
+ * `type Level = 'red' | 'amber'` then `level?: Level` is common, and without
+ * this the inspector offers a free text box where it could offer the five
+ * actual choices.
+ */
+function resolveAlias(type: string, code: string): string {
+  if (!/^\w+$/.test(type))
+    return type
+  return code.match(new RegExp(`type\\s+${type}\\s*=\\s*([^;\n]+)`))?.[1]?.trim() ?? type
 }
 
 function parseStringUnion(type: string): PropOption[] | undefined {
@@ -382,14 +510,55 @@ function parseObjectProps(body: string): PropMeta[] {
       props.push({ name, type: shorthand.toLowerCase() })
       continue
     }
+    const declared = block.match(/type\s*:\s*(\w+)/)?.[1]?.toLowerCase()
+    const fallback = block.match(/default\s*:\s*(.+?),?\s*$/m)?.[1]?.trim()
     props.push({
       name,
-      type: block.match(/type\s*:\s*(\w+)/)?.[1]?.toLowerCase(),
+      // Without a declared type a numeric prop would be written unbound, as a
+      // string, so the default's own shape stands in for it.
+      type: declared ?? inferType(fallback),
       required: /required\s*:\s*true/.test(block),
-      default: block.match(/default\s*:\s*(.+?),?\s*$/m)?.[1]?.replace(/^['"]|['"]$/g, ''),
+      default: fallback?.replace(/^['"]|['"]$/g, ''),
     })
   }
   return props
+}
+
+/**
+ * One plausible entry for a required array prop, built from the element type
+ * the component declares so the shape is right rather than merely non-empty.
+ */
+function sampleItem(prop: PropMeta, code: string): string {
+  const element = (prop.type ?? '').replace(/\[\]$/, '').trim()
+
+  // `{ src: string, caption?: string }` was collapsed to `{…}` by the parser,
+  // so read the keys from the source instead.
+  const shape = code.match(new RegExp(`${prop.name}\\??\\s*:\\s*\\{([^}]*)\\}\\[\\]`))?.[1]
+    ?? (/^[A-Z]/.test(element) ? code.match(new RegExp(`(?:interface|type)\\s+${element}\\s*=?\\s*\\{([^}]*)\\}`))?.[1] : undefined)
+
+  if (!shape)
+    return `'text'`
+
+  const keys = [...shape.matchAll(/(\w+)\??\s*:\s*([\w'|\s]+)/g)].slice(0, 3)
+  if (!keys.length)
+    return `'text'`
+
+  const entries = keys.map(([, key, type]) => `${key}: ${/number/.test(type) ? '1' : `'text'`}`)
+  return `{ ${entries.join(', ')} }`
+}
+
+function inferType(value: string | undefined): string | undefined {
+  if (!value)
+    return undefined
+  if (/^-?\d+(?:\.\d+)?$/.test(value))
+    return 'number'
+  if (value === 'true' || value === 'false')
+    return 'boolean'
+  if (value.startsWith('[') || value.startsWith('() => ['))
+    return 'array'
+  if (/^['"`]/.test(value))
+    return 'string'
+  return undefined
 }
 
 /**
@@ -397,13 +566,26 @@ function parseObjectProps(body: string): PropMeta[] {
  * Required props are stubbed with a value of the right shape, since an empty
  * string satisfies the syntax but fails Vue's prop validation.
  */
-function defaultSnippet(name: string, props: PropMeta[], hasSlot: boolean): string {
+function defaultSnippet(name: string, props: PropMeta[], code: string): string {
   const required = props.filter(p => p.required && p.name !== 'modelValue').slice(0, 3)
-  const attrs = required.map(stubAttr).join('')
-  return hasSlot ? `<${name}${attrs}>Text</${name}>` : `<${name}${attrs} />`
+  const attrs = required.map(prop => stubAttr(prop, code)).join('')
+
+  // An unnamed slot takes children. A component with only named slots does not,
+  // and writing children into one throws them away silently, which is what
+  // happened to QuizCard's text.
+  if (/<slot(?![^>]*\bname=)/.test(code))
+    return `<${name}${attrs}>Text</${name}>`
+
+  const named = [...code.matchAll(/<slot[^>]*\bname="([\w-]+)"/g)].map(m => m[1]).slice(0, 2)
+  if (named.length) {
+    const slots = named.map(slot => `  <template #${slot}>Text</template>`).join('\n')
+    return `<${name}${attrs}>\n${slots}\n</${name}>`
+  }
+
+  return `<${name}${attrs} />`
 }
 
-function stubAttr(prop: PropMeta): string {
+function stubAttr(prop: PropMeta, code = ''): string {
   if (prop.options?.length)
     return ` ${prop.name}="${prop.options[0].value}"`
   if (prop.default)
@@ -411,7 +593,9 @@ function stubAttr(prop: PropMeta): string {
 
   const type = (prop.type ?? 'string').toLowerCase()
   if (type.includes('[]') || type.startsWith('array'))
-    return ` :${prop.name}="[]"`
+    // An empty array renders nothing, and a component that renders nothing
+    // cannot be clicked, so a required list gets one representative row.
+    return ` :${prop.name}="[${sampleItem(prop, code)}]"`
   if (type.startsWith('{') || type.startsWith('object') || type.startsWith('record'))
     return ` :${prop.name}="{}"`
   if (type.includes('number'))

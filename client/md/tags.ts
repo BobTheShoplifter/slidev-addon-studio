@@ -91,11 +91,22 @@ function stripQuotes(value: string) {
   return /^["']/.test(value) ? value.slice(1, -1) : value
 }
 
+/**
+ * Vue accepts a prop written either way, and component docs usually teach the
+ * kebab-case form, so `click-to-play` and `clickToPlay` have to be understood
+ * as the same attribute. Reading only one spelling made the inspector report a
+ * set prop as unset and then write a second, duplicate one.
+ */
+export function sameAttr(a: string, b: string) {
+  const plain = (name: string) => name.replace(/-([a-z])/g, (_, c) => c.toUpperCase()).toLowerCase()
+  return plain(a) === plain(b)
+}
+
 export function findAttr(block: string, name: string): Attr | null {
   const tag = firstTag(block)
   if (!tag)
     return null
-  return parseAttrs(tag.attrs, tag.attrsStart).find(a => a.name === name) ?? null
+  return parseAttrs(tag.attrs, tag.attrsStart).find(a => sameAttr(a.name, name)) ?? null
 }
 
 export interface WriteAttrOptions {
@@ -118,8 +129,11 @@ export function writeAttr(
   if (!tag)
     return block
 
-  const existing = parseAttrs(tag.attrs, tag.attrsStart).find(a => a.name === name)
-  const next = value === null ? '' : renderAttr(name, value, options)
+  const existing = parseAttrs(tag.attrs, tag.attrsStart).find(a => sameAttr(a.name, name))
+  // Keep whichever spelling the author used, so editing a prop does not rewrite
+  // their markup into a different convention.
+  const written = existing?.name ?? name
+  const next = value === null ? '' : renderAttr(written, value, options)
 
   if (existing) {
     const before = block.slice(0, existing.start)

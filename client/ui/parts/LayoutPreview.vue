@@ -25,16 +25,30 @@ const props = defineProps<{ layout: CatalogLayout, frontmatter: Record<string, a
  * with prop warnings.
  */
 const previewProps = computed(() => {
-  const values: Record<string, any> = { ...props.frontmatter }
+  const declared = new Set((props.layout.props ?? []).map(p => p.name))
+  const values: Record<string, any> = { class: props.frontmatter.class }
+
+  // Only what this layout declares. Binding the whole frontmatter put Slidev's
+  // own keys on every thumbnail root as stray HTML attributes.
+  for (const [key, value] of Object.entries(props.frontmatter)) {
+    if (declared.has(key))
+      values[key] = value
+  }
+
   for (const prop of props.layout.props ?? []) {
     if (!prop.required || values[prop.name] !== undefined)
       continue
-    values[prop.name] = stub(prop.type)
+    values[prop.name] = stub(prop.name, prop.type)
   }
   return values
 })
 
-function stub(type: string | undefined) {
+function stub(name: string, type: string | undefined) {
+  // An empty `url` on an iframe layout resolves to the page's own address, so
+  // each such thumbnail would load a whole second copy of the running deck.
+  if (/url|src/i.test(name))
+    return 'about:blank'
+
   const kind = (type ?? 'string').toLowerCase()
   if (kind.includes('[]') || kind.startsWith('array'))
     return []

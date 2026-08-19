@@ -30,6 +30,11 @@ export function useSelection(
     if (!belongsToSlide(node, no()))
       return null
 
+    // A code editor embedded in a slide is the one thing on the canvas that
+    // needs the raw click: claiming it would make the editor untypeable.
+    if (node.closest('.monaco-editor, .slidev-monaco-container'))
+      return null
+
     const el = node.closest<HTMLElement>('[data-studio-src]')
     if (!el || !belongsToSlide(el, no()))
       return null

@@ -24,12 +24,26 @@ export function readProp(content: string, range: SourceRange, prop: PropMeta): s
   if (attr.value === null)
     return isBoolean(prop) ? true : ''
 
+  if (isBoolean(prop))
+    return attr.value !== 'false'
+
   return attr.value
 }
 
 export function writeProp(content: string, range: SourceRange, prop: PropMeta, value: string | boolean | null): string {
   const block = getBlock(content, range)
   if (!opensWithTag(block))
+    return content
+
+  // Removing the attribute means "use the component's default". For a prop that
+  // defaults to true, that is the opposite of what "No" asked for, so the false
+  // has to be written out.
+  if (value === false && isTruthyDefault(prop))
+    return replaceBlock(content, range, writeAttr(block, prop.name, 'false', { bound: true }))
+
+  // Clearing a required prop would leave markup the component warns about, so
+  // an empty value keeps whatever was there.
+  if ((value === null || value === '') && prop.required)
     return content
 
   if (value === null || value === '' || value === false)
@@ -39,6 +53,11 @@ export function writeProp(content: string, range: SourceRange, prop: PropMeta, v
     return replaceBlock(content, range, writeAttr(block, prop.name, true))
 
   return replaceBlock(content, range, writeAttr(block, prop.name, value, { bound: needsBinding(prop, value) }))
+}
+
+/** A boolean prop the component turns on unless told otherwise. */
+export function isTruthyDefault(prop: PropMeta) {
+  return isBoolean(prop) && (prop.default === 'true' || prop.default === true as any)
 }
 
 export function isBoolean(prop: PropMeta) {

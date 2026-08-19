@@ -2,7 +2,7 @@
 import type { PropControl, PropMeta } from '../../types'
 import { computed } from 'vue'
 import { formatStringArray, isArrayType, isColorValue, parseStringArray } from '../../md/literals'
-import { isBoolean, isNumber } from '../../md/props'
+import { isBoolean, isNumber, isTruthyDefault } from '../../md/props'
 import ColorSwatch from './ColorSwatch.vue'
 import ListField from './ListField.vue'
 import StudioField from './StudioField.vue'
@@ -23,6 +23,11 @@ const current = computed(() => (props.value === null ? '' : String(props.value))
 const optionValues = computed(() => props.prop.options?.map(o => o.value) ?? [])
 
 const items = computed(() => parseStringArray(current.value) ?? defaultItems.value)
+
+// An unset boolean shows what the component will actually do, which for a prop
+// defaulting to true is "yes". Showing "no" made it look already off, and
+// choosing "no" then fired no change event at all.
+const booleanValue = computed(() => (props.value === null ? isTruthyDefault(props.prop) : props.value === true))
 
 /**
  * A prop with no value written yet still has a default, and for a list that
@@ -53,9 +58,15 @@ const control = computed<PropControl>(() => {
     return declared
   if (props.prop.options?.length)
     return 'select'
-  if (isArrayType(props.prop.type))
-    // Only offer rows for a list we could actually read back.
+  if (isArrayType(props.prop.type)) {
+    // Rows only for a list of strings. An array of objects, such as a carousel's
+    // items, would have every row rewritten as a bare string.
+    const element = (props.prop.type ?? '').replace(/\[\]$/, '').trim()
+    const isStringList = element === 'string' || /^'/.test(element)
+    if (!isStringList && !looksLikeColors.value)
+      return 'text'
     return items.value ? (looksLikeColors.value ? 'color[]' : 'list') : 'text'
+  }
   if (current.value && isColorValue(current.value))
     return 'color'
   if (isBoolean(props.prop))
@@ -115,7 +126,7 @@ function setList(next: string[]) {
   </StudioField>
 
   <StudioField v-else-if="control === 'boolean'" :label="label">
-    <select :value="value === true ? 'yes' : 'no'" @change="emit('change', ($event.target as HTMLSelectElement).value === 'yes')">
+    <select :value="booleanValue ? 'yes' : 'no'" @change="emit('change', ($event.target as HTMLSelectElement).value === 'yes')">
       <option value="no">
         No
       </option>

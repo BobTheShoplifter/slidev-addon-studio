@@ -136,9 +136,9 @@ function exampleFrom(comment: string | undefined, name: string): string | undefi
   const collected: string[] = []
   for (let i = start; i < lines.length; i++) {
     collected.push(lines[i])
-    const joined = collected.join('\n')
+    const joined = trimToTag(collected.join('\n'), name)
     if (isBalanced(joined, name)) {
-      const example = canonicalise(dedent(collected).join('\n').trim(), name)
+      const example = canonicalise(trimToTag(dedent(collected).join('\n').trim(), name), name)
       // Docs abbreviate: `:items="[{ … }, …]"` shows the shape without being
       // valid JavaScript. Inserting that breaks the slide it lands on, with a
       // 500 from the compiler, so an abbreviated example is no example at all.
@@ -159,6 +159,22 @@ function exampleFrom(comment: string | undefined, name: string): string | undefi
  * `<YourElements />`, and inserted an unclosed `<Transform>` that broke the
  * slide it landed on.
  */
+/**
+ * Cuts an example off at the end of its own markup.
+ *
+ * Doc comments annotate their examples: TlpBadge's reads
+ * `<TlpBadge /> → TLP:AMBER (default)`, and taking the whole line dropped that
+ * prose onto the slide as visible text.
+ */
+function trimToTag(text: string, name: string): string {
+  const selfClosing = text.match(new RegExp(`^\\s*<${name}\\b(?:"[^"]*"|'[^']*'|[^>"'])*?/>`, 'i'))
+  if (selfClosing)
+    return selfClosing[0].trim()
+
+  const closing = text.search(new RegExp(`</${name}>`, 'i'))
+  return closing === -1 ? text : text.slice(0, closing + name.length + 3)
+}
+
 function isBalanced(text: string, name: string) {
   const outer = text.trim().match(new RegExp(`^<${name}\\b((?:"[^"]*"|'[^']*'|[^>"'])*?)(/?)>`, 'i'))
   if (!outer)

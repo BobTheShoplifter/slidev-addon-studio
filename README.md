@@ -202,6 +202,7 @@ the block existed.
 | `props.<name>.hidden` | Keep the prop out of the inspector |
 | `props.<name>.options` | A list of values, or `{ files, exclude }` globs |
 | `props.<name>.control` | Force a control: `text`, `number`, `boolean`, `select`, `list`, `color`, `color[]` |
+| `hidden: true` | Keep the component out of the palette, for one that is not meant to be written by hand |
 
 Controls are otherwise inferred. An array prop gets a list editor with add,
 remove and reorder; a string union gets a dropdown; a number is written bound as
@@ -275,6 +276,13 @@ worth being dull about.
   their own file.
 - The first slide of the entry file cannot be deleted or moved: its frontmatter
   is the deck's global configuration.
+- Components Slidev generates rather than authors write, such as `Monaco`,
+  `Mermaid` and `PlantUml`, are left out of the palette: they take a compressed
+  payload, so a hand-written tag cannot render. Write the fenced code block
+  instead and Slidev emits them for you.
+- A component whose template has several root nodes is left out too. Vue drops
+  fallthrough attributes on a fragment root, so such a component can never carry
+  the annotation that makes it selectable.
 - Prop extraction understands `defineProps` and the Options API. Anything more
   exotic simply shows no props; the component still works, and a `<studio>`
   block can describe the props by hand.
