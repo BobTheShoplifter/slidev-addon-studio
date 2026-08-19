@@ -27,11 +27,16 @@ const no = computed(() => nav.currentSlideNo.value)
 
 const source = useSlideSource(no)
 const canvas = useSlideCanvas(() => Number(source.frontmatter.value.zoom ?? 1))
-async function commit(content: string, label: string, options?: { skipHmr?: boolean }) {
+async function commit(content: string, label: string, options?: { skipHmr?: boolean, keepSelection?: boolean }) {
   const current = selection.value
   await source.setContent(content, label, options)
-  if (current)
-    await selectionApi.reselect(current.range, current.kind, current.tag)
+
+  // Nothing re-rendered, so the element the user is holding is still the one on
+  // screen. Re-finding it would only make the panel flicker.
+  if (options?.keepSelection || !current)
+    return
+
+  await selectionApi.reselect(current.range, current.kind, current.tag)
 }
 
 const selectionApi = useSelection(
@@ -45,6 +50,7 @@ const gizmo = useTransformGizmo({
   canvas,
   getTarget: () => selection.value,
   getContent: () => source.content.value,
+  getNo: () => no.value,
   commit,
 })
 

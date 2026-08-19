@@ -28,6 +28,14 @@ const items = computed(() => parseStringArray(current.value) ?? defaultItems.val
 /** Rows, when the value is a list of records rather than of strings. */
 const rows = computed(() => parseObjectArray(current.value) ?? defaultRows.value)
 
+/**
+ * A written value the parser will not take apart, such as a list holding a
+ * nested object or a call. Offering the row editor for one of these showed an
+ * empty list over a prop that has data, and the first "Add" replaced the lot.
+ * The literal itself is editable instead.
+ */
+const unparsedRows = computed(() => !!current.value && parseObjectArray(current.value) === null)
+
 const defaultRows = computed(() => {
   if (current.value || !props.prop.default)
     return null
@@ -75,7 +83,7 @@ const control = computed<PropControl>(() => {
 
     // A list of records is edited as rows of fields, which needs either rows to
     // read or a declared shape to build one from.
-    if (!isStringList && (rows.value?.length || props.prop.fields?.length))
+    if (!isStringList && !unparsedRows.value && (rows.value?.length || props.prop.fields?.length))
       return 'object[]'
     if (!isStringList && !looksLikeColors.value)
       return 'text'

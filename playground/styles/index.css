@@ -1,0 +1,15 @@
+/*
+ * The playground's palette. Studio reads the custom properties a deck declares
+ * globally and offers them in every colour control, so a slide keeps referring
+ * to the theme instead of freezing a hex.
+ */
+:root {
+  --accent: #4f8cff;
+  --accent-soft: #e8f0ff;
+  --ink: #171821;
+  --ink-muted: #6b6f80;
+  --paper: #ffffff;
+  --signal-green: #2fae72;
+  --signal-amber: #f0a92b;
+  --signal-red: #e2483d;
+}

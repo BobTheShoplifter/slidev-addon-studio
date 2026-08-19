@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { studioPalette } from '../../composables/useCatalog'
 import { isColorValue } from '../../md/literals'
 
 /**
@@ -15,7 +16,15 @@ const props = defineProps<{ value: string }>()
 const emit = defineEmits<{ change: [value: string] }>()
 
 const picker = ref<HTMLInputElement | null>(null)
+const open_ = ref(false)
 const paintable = computed(() => isColorValue(props.value))
+
+/**
+ * The theme declares its palette once, as custom properties, so those are the
+ * colours worth proposing: choosing one keeps the deck referring to the theme
+ * rather than freezing a hex that stops following it.
+ */
+const palette = computed(() => studioPalette)
 
 /** Resolves `var(--x)` and named colours to the hex a colour input needs. */
 function resolved(): string {
@@ -36,11 +45,16 @@ function resolved(): string {
   return `#${rgb.slice(0, 3).map(n => Number(n).toString(16).padStart(2, '0')).join('')}`
 }
 
-function open() {
+function pick() {
   if (!picker.value)
     return
   picker.value.value = resolved()
   picker.value.click()
+}
+
+function choose(value: string) {
+  open_.value = false
+  emit('change', value)
 }
 </script>
 
@@ -49,8 +63,8 @@ function open() {
     <button
       class="studio-color__swatch"
       :style="paintable ? { background: value } : undefined"
-      title="Pick a colour"
-      @click="open"
+      :title="palette.length ? 'Choose a colour' : 'Pick a colour'"
+      @click="palette.length ? (open_ = !open_) : pick()"
     />
     <input
       ref="picker"
@@ -64,5 +78,19 @@ function open() {
       placeholder="#4f8cff or var(--accent)"
       @change="emit('change', ($event.target as HTMLInputElement).value)"
     >
+
+    <span v-if="open_" class="studio-palette">
+      <button
+        v-for="colour in palette"
+        :key="colour.name"
+        class="studio-palette__chip"
+        :style="{ background: colour.value }"
+        :title="`${colour.name} (${colour.resolved})`"
+        @click="choose(colour.value)"
+      />
+      <button class="studio-palette__custom" @click="open_ = false; pick()">
+        Custom…
+      </button>
+    </span>
   </span>
 </template>

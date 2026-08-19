@@ -4,7 +4,7 @@ A visual editor for [Slidev](https://sli.dev). Select, drag, resize, animate and
 compose slides directly on the canvas, the way you would in Keynote or
 PowerPoint, while the deck stays exactly what it was: a Markdown file.
 
-![Studio open on a slide, with an element selected and the properties panel showing the Markdown behind it](./docs/studio.jpg)
+![Studio open on a slide, with a component selected. The Element panel shows its props, its classes and the Markdown line it came from](./docs/studio.png)
 
 **Markdown is the source of truth.** Every action in Studio is a small, readable
 edit to your `.md` file. There is no project format, no database and no lock-in.
@@ -66,6 +66,13 @@ Elements snap to the canvas edges, its centre and thirds, and to the edges and
 centres of everything else on the slide. Hold <kbd>Alt</kbd> to place something
 exactly where you want it instead.
 
+![A block being dragged across the slide, with the selection outline and handles following the pointer](./docs/drag.png)
+
+A move of an element that is already free is written straight into its `pos`,
+without rebuilding the slide, so dragging stays as smooth as Slidev's own
+handles. Only the first drag of a block in the document flow re-renders it,
+because that one changes the Markdown's shape rather than four numbers in it.
+
 ### Editing text
 
 Double-click any block and it becomes editable where it sits, with a toolbar for
@@ -76,6 +83,8 @@ table or a fenced code block is editable too: to this editor they are text like
 everything else. It is also why the toolbar can be trusted. Round-tripping
 rendered HTML back into Markdown is where visual editors lose components,
 directives and formatting, and a Slidev deck is full of all three.
+
+![A paragraph being edited in place, with a formatting toolbar above it](./docs/inline.png)
 
 <kbd>Ctrl</kbd> + <kbd>Enter</kbd> applies, <kbd>Esc</kbd> cancels,
 <kbd>Ctrl</kbd> + <kbd>B</kbd> and <kbd>Ctrl</kbd> + <kbd>I</kbd> do what you
@@ -88,14 +97,20 @@ component's own props. Numbers are written bound (`:size="140"`), enumerated
 strings plainly (`color="red"`), and options backed by image files get a picker
 that shows the images.
 
-![The Element panel showing a component's props, including a picker of shapes read from a folder of SVG files](./docs/element-props.jpg)
+A prop that holds records is edited as one row per entry with a field per key,
+typed from the element type the component declares, so an empty list still knows
+what fields it wants. A prop that holds a colour offers the deck's own palette,
+read from the custom properties in your theme's stylesheets, so picking one
+keeps the slide pointing at `var(--accent)` rather than freezing a hex.
+
+![The Element panel editing a list of records as rows, with the theme's colour palette open below it](./docs/element-props.png)
 
 ### Animating
 
 Slidev's animation model is a sequence of click steps per slide, so the Animate
 panel leads with that sequence and lets you scrub it.
 
-![The Animate panel with a click scrubber and reveal settings for the selected list](./docs/animate.jpg)
+![The Animate panel with a click scrubber and the reveal settings for the selected paragraph](./docs/animate.png)
 
 Studio writes whichever form fits the block:
 
@@ -119,9 +134,31 @@ Studio writes whichever form fits the block:
 </v-clicks>
 ```
 
+### Choosing a layout
+
+A layout is picked from thumbnails rather than from a list of names. Each one
+renders the layout at full slide size with this slide's own frontmatter, title
+and lead line, then scales it down, so what you compare is the composition you
+would get.
+
+![The Layout panel showing a thumbnail per layout, each rendering the current slide's title](./docs/layout.png)
+
+A layout's props are the frontmatter keys it reads, and they are edited in the
+same panel. On a slide like `layout: fact`, whose entire visible text lives in
+`value:` and `label:`, that panel is the only place to edit it: none of that
+text ever passed through Markdown, so there is nothing on the canvas to click.
+
+### Working with slides
+
+![The Slides panel showing a live thumbnail per slide, with add, duplicate and delete](./docs/slides.png)
+
+Thumbnails are the real slide components rendered small, not captures, so they
+are never out of date. Drag one to reorder, and add, duplicate or delete from
+the same panel.
+
 ### Inserting
 
-![The Components panel showing Markdown basics above the deck's own components](./docs/components.jpg)
+![The Components panel showing the deck's own components, each tile rendering the real component](./docs/components.png)
 
 The palette starts with the plain Markdown blocks, because most of what goes on
 a slide is a heading, a paragraph or a list. Below those sit every component the
@@ -136,7 +173,7 @@ own `components/` directory.
 | Double click | Edit the text of a block in place |
 | Drag | Move the selection. A click on its own never repositions anything |
 | <kbd>Backspace</kbd> or <kbd>Delete</kbd> | Delete the selected element |
-| <kbd>Esc</kbd> | Deselect |
+| <kbd>Esc</kbd> | Cancel the drag in progress, or deselect |
 | <kbd>Ctrl</kbd> + <kbd>Z</kbd> | Undo |
 | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd> | Redo |
 | <kbd>Alt</kbd> (held) | Bypass snapping while dragging |
@@ -202,6 +239,7 @@ the block existed.
 | `props.<name>.hidden` | Keep the prop out of the inspector |
 | `props.<name>.options` | A list of values, or `{ files, exclude }` globs |
 | `props.<name>.control` | Force a control: `text`, `number`, `boolean`, `select`, `list`, `color`, `color[]` |
+| `props.<name>.fields` | For a list of records, the fields each row gets; inferred from the declared element type when omitted |
 | `hidden: true` | Keep the component out of the palette, for one that is not meant to be written by hand |
 
 Controls are otherwise inferred. A string union gets a dropdown, a number is
@@ -218,6 +256,12 @@ holds:
 Colours are also inferred from the values themselves, so a palette prop is a
 colour editor without being declared. `control: color` or `control: color[]`
 covers a prop that has no value yet.
+
+The colours offered are your deck's own. Studio reads the custom properties
+declared globally in the stylesheets your theme, addons and deck already ship,
+so choosing one writes `var(--accent)` rather than a hex that stops following
+the theme. A property declared inside a component's own rule is left out, since
+it resolves to nothing at the slide root.
 
 Layouts are read the same way. A layout's props are the frontmatter keys it
 understands, so a slide like `layout: fact`, whose entire visible text lives in
@@ -294,11 +338,17 @@ worth being dull about.
 - Prop extraction understands `defineProps` and the Options API. Anything more
   exotic simply shows no props; the component still works, and a `<studio>`
   block can describe the props by hand.
-- A list editor is offered for arrays of strings. An array of objects, such as
-  a carousel's items, is left as a text field rather than guessed at.
 - An element nested inside a block of raw HTML can be selected, styled, animated
   and deleted, but not reordered or duplicated on its own: it shares a Markdown
   block with its siblings.
+- Classes on a Markdown block use MDC's trailing `{.class}`, which attaches to
+  the last element on the line. That is the block itself for a one-line
+  paragraph or heading, so those are offered. A list, a quote and a paragraph
+  written across several lines are not: the class would land on the last
+  `<li>`, or inside the quote, or on a `<span>` around the last few words.
+  Wrap the block in a `<div>` to style it as a whole.
+- Two blocks that are byte for byte identical cannot be told apart if the line
+  hint is ever wrong. Studio says so and refuses rather than picking one.
 - A usage example that abbreviates, such as `:items="[{ … }, …]"`, is still
   inserted as the snippet but cannot be previewed, since it is not valid
   JavaScript. Add `preview:` to the `@studio` block to give the palette

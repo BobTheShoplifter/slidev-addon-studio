@@ -24,7 +24,10 @@ export function readProp(content: string, range: SourceRange, prop: PropMeta): s
   if (attr.value === null)
     return isBoolean(prop) ? true : ''
 
-  if (isBoolean(prop))
+  // A prop that is a boolean *and* something else, such as `boolean | 'once'`,
+  // keeps its written value: the inspector shows it as one option among the
+  // others rather than collapsing it to yes or no.
+  if (isBoolean(prop) && !prop.options?.length)
     return attr.value !== 'false'
 
   return attr.value
@@ -76,8 +79,18 @@ export function isNumber(prop: PropMeta) {
  * Markdown as `color="red"`.
  */
 function needsBinding(prop: PropMeta, value: string) {
-  if (prop.options?.length)
+  if (prop.options?.length) {
+    // An enumerated prop can still mix types. SlidevVideo's `autoplay` is
+    // `boolean | 'once'`, and `autoplay="true"` hands it the string "true",
+    // which is neither `true` nor `'once'`, so autoplay never fired.
+    const text = value.trim()
+    const declared = (prop.type ?? '').toLowerCase()
+    if ((text === 'true' || text === 'false') && declared.includes('boolean'))
+      return true
+    if (/^-?\d+(?:\.\d+)?$/.test(text) && declared.includes('number'))
+      return true
     return false
+  }
   if (isNumber(prop))
     return true
   const type = (prop.type ?? '').toLowerCase()

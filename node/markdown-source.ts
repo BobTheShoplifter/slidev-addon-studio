@@ -104,7 +104,7 @@ export function studioMarkdownSetup(md: MarkdownIt, options: StudioMarkdownOptio
 
   md.parse = function (src: string, env: any): Token[] {
     const tokens = _parse(src, env)
-    annotateTokens(tokens, annotate)
+    annotateTokens(tokens, annotate, src.split(/\r?\n/))
     return tokens
   }
 
@@ -145,16 +145,22 @@ function installFenceAnnotation(md: MarkdownIt) {
   } as typeof md.renderer.rules.fence
 }
 
-function annotateTokens(tokens: Token[], annotate: 'all' | 'html' | 'off') {
+function annotateTokens(tokens: Token[], annotate: 'all' | 'html' | 'off', lines: string[]) {
   for (const token of tokens) {
     if (token.children?.length)
-      annotateTokens(token.children, annotate)
+      annotateTokens(token.children, annotate, lines)
 
     if (!token.map || token.hidden)
       continue
 
     const [start, end] = token.map
-    const range = `${start},${Math.max(start + 1, end)}`
+    // markdown-it hands the last item of a list a map that runs to the end of
+    // the list, blank separator line included. Deleting that item would then
+    // take the blank line with it and weld the next block onto the list.
+    let last = end
+    while (last > start + 1 && !(lines[last - 1] ?? '').trim())
+      last -= 1
+    const range = `${start},${Math.max(start + 1, last)}`
 
     const kind = BLOCK_TOKENS[token.type]
     if (kind) {
@@ -202,14 +208,21 @@ function annotateHtmlBlock(html: string, blockStart: number, annotate: 'all' | '
 
     const start = blockStart + tag.startLine
     const end = blockStart + Math.max(tag.startLine + 1, tag.endLine)
-    const source = html.slice(html.lastIndexOf('<', tag.insertAt), tag.insertAt)
+    // The scanner already knows where the tag opens. Searching back for the
+    // nearest `<` found the one inside `label="a < b"` instead, and the
+    // fingerprint was then computed from a fragment of an attribute value,
+    // which the client could never reproduce.
+    const source = html.slice(tag.start, tag.insertAt)
 
     const attributes = [
       ` ${SOURCE_ATTR}="${start},${end}"`,
       ` ${KIND_ATTR}="${component ? 'component' : 'html'}"`,
       ` ${TAG_ATTR}="${tag.name}"`,
       ` ${SIG_ATTR}="${tagSignature(source)}"`,
-      i > 0 ? ` ${NESTED_ATTR}="1"` : '',
+      // Nested means enclosed by another element, not merely "not the first
+      // tag scanned". Two sibling `<div>`s in one block are both top level,
+      // and marking the second as nested locked it out of reordering.
+      tag.depth > 0 ? ` ${NESTED_ATTR}="1"` : '',
     ].join('')
 
     result = result.slice(0, tag.insertAt) + attributes + result.slice(tag.insertAt)

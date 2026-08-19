@@ -2,6 +2,7 @@ import type { ResolvedSlidevOptions } from '@slidev/types'
 import type { PropField, PropMeta, PropOption } from './metadata'
 import { readdir, readFile } from 'node:fs/promises'
 import { basename, extname, join, relative, resolve, sep } from 'node:path'
+import { BUILTIN_META } from './builtin-meta'
 import { parseStudioBlock, parseUsageExample, resolveOptions } from './metadata'
 
 export type { PropControl, PropField, PropMeta, PropOption } from './metadata'
@@ -200,18 +201,28 @@ function originOf(root: string) {
 }
 
 function classify(file: string, options: ResolvedSlidevOptions): { source: ComponentSource, origin: string } {
-  const inside = (root: string) => !relative(root, file).startsWith('..')
-  for (const root of options.themeRoots) {
-    if (inside(root))
-      return { source: 'theme', origin: originOf(root) }
+  const candidates: { root: string, source: ComponentSource, origin: string }[] = [
+    { root: options.clientRoot, source: 'builtin', origin: 'Slidev' },
+    ...options.themeRoots.map(root => ({ root, source: 'theme' as const, origin: originOf(root) })),
+    ...options.addonRoots.map(root => ({ root, source: 'addon' as const, origin: originOf(root) })),
+  ]
+
+  // The deepest containing root wins rather than the first one that matches.
+  // Roots nest: a locally linked addon carries its own `node_modules`, so
+  // Slidev's own client sits *inside* the addon root and every builtin layout
+  // was being credited to the addon.
+  let best: { source: ComponentSource, origin: string } | null = null
+  let bestLength = -1
+  for (const { root, source, origin } of candidates) {
+    if (relative(root, file).startsWith('..'))
+      continue
+    if (root.length > bestLength) {
+      bestLength = root.length
+      best = { source, origin }
+    }
   }
-  for (const root of options.addonRoots) {
-    if (inside(root))
-      return { source: 'addon', origin: originOf(root) }
-  }
-  if (inside(options.clientRoot))
-    return { source: 'builtin', origin: 'Slidev' }
-  return { source: 'project', origin: 'Project' }
+
+  return best ?? { source: 'project', origin: 'Project' }
 }
 
 async function listFiles(dir: string): Promise<string[]> {
@@ -235,7 +246,14 @@ async function readComponent(file: string, name: string, source: ComponentSource
     return null
   }
 
-  const meta = parseStudioBlock(code)
+  // Slidev's own components cannot carry a `<studio>` block, so their labels
+  // and controls ship here. A real block always wins. Keyed by name and only
+  // for Slidev's own: a theme is free to ship its own `Toc`, and it should not
+  // inherit labels for props it never declared.
+  const builtin = source === 'builtin' ? BUILTIN_META[name] : undefined
+  const declared = parseStudioBlock(code)
+  const meta = { ...builtin, ...declared }
+  meta.props = { ...builtin?.props, ...declared.props }
   if (meta.hidden)
     return null
 
@@ -313,20 +331,40 @@ export function hasSingleRoot(code: string): boolean {
 /** Opening prose of the component's doc comment, if it reads like a summary. */
 function describeFromDoc(code: string): string | undefined {
   // Only the part before the template: a `/* … */` inside <style> is CSS, and
-  // taking it made Monaco's description read "Revert styles".
-  const head = code.split(/<template[\s>]/)[0]
+  // taking it made Monaco's description read "Revert styles". Anchored to the
+  // start of a line so the SFC's own block is what cuts it, not a `<template>`
+  // written inside the doc comment as an example.
+  const head = code.split(/^<template[\s>]/m)[0]
   const comment = head.match(/\/\*\*([\s\S]*?)\*\//)?.[1] ?? head.match(/<!--(?!\s*@studio)([\s\S]*?)-->/)?.[1]
   if (!comment)
     return undefined
 
   const prose: string[] = []
+  let fenced = false
   for (const raw of comment.split('\n')) {
     const line = raw.replace(/^\s*\* ?/, '').trim()
+
+    // A fenced usage example is not prose. Joined in, it came out as a wall of
+    // Markdown syntax under the component's name.
+    if (/^(?:```|~~~)/.test(line)) {
+      fenced = !fenced
+      if (prose.length)
+        break
+      continue
+    }
+    if (fenced)
+      continue
+
     if (!line || line.startsWith('<') || line.startsWith('@')) {
       if (prose.length)
         break
       continue
     }
+
+    // A bare label such as `Usage:` introduces an example, it does not describe.
+    if (!prose.length && /^[\w ]{1,20}:$/.test(line))
+      continue
+
     prose.push(line)
     if (/[.!?]$/.test(line))
       break
@@ -337,6 +375,10 @@ function describeFromDoc(code: string): string | undefined {
 
   // `Name — what it does` and `Name - what it does` both read as a summary.
   const summary = prose.join(' ').replace(/^\w+\s*[-–—:]\s*/, '')
+  // An empty string is not "no description": it is a description that says
+  // nothing, and it defeated every `?? fallback` downstream.
+  if (!summary)
+    return undefined
   if (summary.length <= 120)
     return summary
   const cut = summary.slice(0, 117)
@@ -358,6 +400,10 @@ async function describeProps(code: string, file: string, meta: ReturnType<typeof
     prop.label = declared.label
     prop.hidden = declared.hidden
     prop.control = declared.control
+    // A declared shape wins: a component with an opaque element type, such as
+    // `items: any[]`, has no other way to say what a row holds.
+    if (declared.fields?.length)
+      prop.fields = declared.fields.map(field => (typeof field === 'string' ? { name: field } : field))
     const options = await resolveOptions(declared.options, file)
     if (options)
       prop.options = options
@@ -453,17 +499,56 @@ function parseStringUnion(type: string): PropOption[] | undefined {
 }
 
 function parseDefaults(code: string): Record<string, string> {
-  const match = code.match(/withDefaults\s*\([\s\S]*?,\s*\{([\s\S]*?)\}\s*,?\s*\)/)
-  if (!match)
+  // Matched by walking the call rather than by a lazy regex: a default such as
+  // `config: () => ({ theme: 'dark' })` closes a brace early, and the regex
+  // stopped there, truncating that default and losing every one after it.
+  const at = code.indexOf('withDefaults')
+  if (at < 0)
+    return {}
+  const open = code.indexOf('(', at)
+  if (open < 0)
+    return {}
+
+  const args = splitTopLevel(balanced(code, open))
+  const last = (args[args.length - 1] ?? '').trim()
+  if (!last.startsWith('{') || !last.endsWith('}'))
     return {}
 
   const defaults: Record<string, string> = {}
-  for (const entry of splitTopLevel(match[1])) {
+  for (const entry of splitTopLevel(last.slice(1, -1))) {
     const kv = entry.match(/^\s*(\w+)\s*:\s*([\s\S]+?)\s*$/)
     if (kv)
       defaults[kv[1]] = kv[2].replace(/^['"]|['"]$/g, '')
   }
   return defaults
+}
+
+/** The text between the bracket at `open` and its matching partner. */
+function balanced(code: string, open: number): string {
+  const pairs: Record<string, string> = { '(': ')', '[': ']', '{': '}' }
+  const close = pairs[code[open]]
+  if (!close)
+    return ''
+
+  let depth = 0
+  let quote: string | null = null
+  for (let i = open; i < code.length; i++) {
+    const char = code[i]
+    if (quote) {
+      if (char === '\\')
+        i += 1
+      else if (char === quote)
+        quote = null
+      continue
+    }
+    if (char === '\'' || char === '"' || char === '`')
+      quote = char
+    else if (char === code[open])
+      depth += 1
+    else if (char === close && --depth === 0)
+      return code.slice(open + 1, i)
+  }
+  return ''
 }
 
 /**
@@ -476,11 +561,15 @@ function parseDefaults(code: string): Record<string, string> {
 function splitTopLevel(body: string): string[] {
   const parts: string[] = []
   let depth = 0
+  // Generics carry commas too: `Record<string, string>` was split down the
+  // middle, leaving the prop with the type `Record<string`.
+  let angle = 0
   let quote: string | null = null
   let start = 0
 
   for (let i = 0; i < body.length; i++) {
     const char = body[i]
+    const previous = body[i - 1] ?? ''
 
     if (quote) {
       if (char === '\\')
@@ -496,7 +585,13 @@ function splitTopLevel(body: string): string[] {
       depth += 1
     else if (')]}'.includes(char))
       depth -= 1
-    else if (char === ',' && depth === 0) {
+    // A `<` only opens a generic when it follows a name or another generic;
+    // a `>` only closes one when there is one open and it is not part of `=>`.
+    else if (char === '<' && /[\w>]/.test(previous))
+      angle += 1
+    else if (char === '>' && angle > 0 && previous !== '=')
+      angle -= 1
+    else if (char === ',' && depth === 0 && angle === 0) {
       parts.push(body.slice(start, i))
       start = i + 1
     }

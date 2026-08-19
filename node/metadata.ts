@@ -66,6 +66,12 @@ interface RawPropMeta {
   control?: PropControl
   /** A list of values, or a description of where to find them. */
   options?: string[] | { files: string, exclude?: string }
+  /**
+   * For a list of records, the fields each row holds. Only needed when the
+   * element type is opaque, such as `items: any[]`: a declared shape like
+   * `{ year: string }[]` is read straight from the component.
+   */
+  fields?: (string | { name: string, type?: string })[]
 }
 
 /**

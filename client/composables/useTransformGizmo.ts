@@ -38,7 +38,9 @@ export function useTransformGizmo(context: {
   canvas: ReturnType<typeof useSlideCanvas>
   getTarget: () => StudioTarget | null
   getContent: () => string
-  commit: (content: string, label: string, options?: { skipHmr?: boolean }) => Promise<void>
+  /** The slide being edited, so a gesture cannot land on a different one. */
+  getNo: () => number
+  commit: (content: string, label: string, options?: { skipHmr?: boolean, keepSelection?: boolean }) => Promise<void>
 }) {
   const { canvas } = context
 
@@ -58,6 +60,7 @@ export function useTransformGizmo(context: {
   let others: Box[] = []
   let painted: HTMLElement | null = null
   let restore = ''
+  let startNo = 0
 
   function start(event: PointerEvent, next: Gesture) {
     const current = context.getTarget()
@@ -79,6 +82,7 @@ export function useTransformGizmo(context: {
     pointerStart = { x: event.clientX, y: event.clientY }
     preview.value = { ...startBox }
 
+    startNo = current.no
     others = collectOthers(current.el, current.no)
     painted = current.el
     restore = painted.getAttribute('style') ?? ''
@@ -171,14 +175,28 @@ export function useTransformGizmo(context: {
       return
     }
 
-    if (!target?.range) {
+    // The deck can move under a gesture: a remote, an autoplay, a stray arrow
+    // key. Writing then means writing this slide's line range into whatever
+    // slide is now current, so the gesture is abandoned instead.
+    if (!target?.range || context.getNo() !== startNo) {
+      if (painted && !hadPosition)
+        painted.setAttribute('style', restore)
       armed.value = false
       active.value = false
+      guides.value = []
+      gesture = null
+      preview.value = null
+      target = null
+      painted = null
       return
     }
 
     const box = preview.value ?? startBox
     const wasResize = gesture?.type === 'resize'
+    // Only an edge that moved vertically fixes the height. A purely horizontal
+    // resize used to freeze it too, writing a number the element was never
+    // painted at.
+    const changedHeight = gesture?.type === 'resize' && /[ns]/.test(gesture.handle)
     armed.value = false
     active.value = false
     guides.value = []
@@ -190,7 +208,7 @@ export function useTransformGizmo(context: {
       w: box.w,
       // A resize that touched a vertical edge fixes the height; otherwise the
       // element keeps sizing itself, which is what authors usually want.
-      h: autoHeight && !wasResize ? null : box.h,
+      h: autoHeight && !changedHeight ? null : box.h,
       rotate: startRotate,
     }
 
@@ -198,14 +216,45 @@ export function useTransformGizmo(context: {
     const next = writeDrag(content, target.range, pos)
     const label = wasResize ? 'Resize element' : 'Move element'
 
-    // The re-render restores the real style; drop ours so nothing sticks.
-    if (painted)
+    // An element that already had a position only changes its numbers, and the
+    // paint above already shows the result. Rebuilding the slide for that is
+    // what made dragging feel heavy and dropped the selection on every move, so
+    // the write skips HMR and the painted style stands, exactly as Slidev's own
+    // `v-drag` does. A block being positioned for the first time does need the
+    // re-render, since only then does the directive take over its layout.
+    const inPlace = hadPosition
+    if (!inPlace && painted)
       painted.setAttribute('style', restore)
-    painted = null
+    if (!inPlace)
+      painted = null
 
-    await context.commit(next, label)
+    await context.commit(next, label, { skipHmr: inPlace, keepSelection: inPlace })
     preview.value = null
     target = null
+  })
+
+  /**
+   * Escape backs out of a gesture: the element returns to where it was and
+   * nothing is written. Every editor offers this, and without it a drag that
+   * has gone wrong can only be finished and then undone.
+   */
+  onDomEvent<KeyboardEvent>(window, 'keydown', (event) => {
+    if (event.key !== 'Escape' || !armed.value)
+      return
+
+    event.preventDefault()
+    if (painted && !hadPosition)
+      painted.setAttribute('style', restore)
+    else if (painted)
+      paint(startBox, startRotate)
+
+    armed.value = false
+    active.value = false
+    guides.value = []
+    gesture = null
+    preview.value = null
+    target = null
+    painted = null
   })
 
   /**

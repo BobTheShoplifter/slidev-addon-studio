@@ -6,7 +6,7 @@ import { useStudio } from '../../context'
 import { readProp, writeProp } from '../../md/props'
 import { parsePos, readDrag, removeDrag, writeDrag } from '../../md/drag'
 import { getBlock, moveBlock, removeBlock, insertAfter, replaceBlock } from '../../md/lines'
-import { readClasses, writeClasses } from '../../md/classes'
+import { canStyle, readClasses, writeClasses } from '../../md/classes'
 import { missed, selection } from '../../state'
 import PropField from '../parts/PropField.vue'
 import StudioField from '../parts/StudioField.vue'
@@ -21,6 +21,9 @@ const studio = useStudio()
 const { components } = useCatalog()
 
 const range = computed(() => selection.value?.range ?? null)
+
+/** Whether this block can carry a class at all, in Markdown or as an attribute. */
+const styleable = computed(() => !!range.value && canStyle(studio.content(), range.value, !!configs.mdc))
 
 /**
  * The catalog entry behind the selected tag, if it is a component. That is
@@ -207,11 +210,16 @@ async function remove() {
       <h3 class="studio-section__title">
         Style
       </h3>
-      <StudioField label="Classes">
+      <StudioField v-if="styleable" label="Classes">
         <input v-model="classes" type="text" placeholder="text-xl opacity-80" @change="applyClasses">
       </StudioField>
       <p v-if="!selection.tag && !configs.mdc" class="studio-hint">
         Classes on Markdown blocks need <code>mdc: true</code> in the headmatter.
+      </p>
+      <p v-else-if="!styleable" class="studio-hint">
+        This block cannot carry a class of its own. A trailing
+        <code>{{ '{.class}' }}</code> would land on its last line instead. Wrap
+        it in a <code>&lt;div&gt;</code> to style it.
       </p>
     </section>
 

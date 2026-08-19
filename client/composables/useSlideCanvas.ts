@@ -61,13 +61,25 @@ export function useSlideCanvas(zoom: () => number = () => 1) {
   }
 
   /** A rendered element's box, in canvas units. */
+  /**
+   * An element's own box in canvas units.
+   *
+   * Deliberately not the bounding rect's width and height: for a rotated
+   * element that is the axis-aligned box *containing* the rotation, which is
+   * larger than the element. Measuring it and writing it back as the size grew
+   * the element on every gesture. The layout size does not rotate, so it is
+   * taken from there and the rect is used only to locate the centre.
+   */
   function boxOf(target: Element) {
     const box = target.getBoundingClientRect()
+    const layout = target as HTMLElement
+    const w = layout.offsetWidth || box.width / scale.value
+    const h = layout.offsetHeight || box.height / scale.value
     return {
-      x: (box.left - rect.value.left) / scale.value,
-      y: (box.top - rect.value.top) / scale.value,
-      w: box.width / scale.value,
-      h: box.height / scale.value,
+      x: (box.left + box.width / 2 - rect.value.left) / scale.value - w / 2,
+      y: (box.top + box.height / 2 - rect.value.top) / scale.value - h / 2,
+      w,
+      h,
     }
   }
 

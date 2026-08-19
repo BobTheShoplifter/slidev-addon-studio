@@ -93,6 +93,12 @@ function locate(content: string, name: string): [number, number] | null {
 }
 
 suite('every component can be moved, configured and animated', async () => {
+  // A skipped suite still has its body collected, so without this the fetch
+  // below runs against `undefined/@studio/catalog` and fails collection for
+  // everyone who simply ran `pnpm test`.
+  if (!BASE)
+    return
+
   const { components } = await catalog()
   const deck = await slides()
 

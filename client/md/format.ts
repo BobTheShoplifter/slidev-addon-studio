@@ -27,12 +27,20 @@ export function toggleWrap(selection: Selection, marker: string): FormatResult {
   const inner = text.slice(start, end)
   const after = text.slice(end)
 
-  if (inner.startsWith(marker) && inner.endsWith(marker) && inner.length >= marker.length * 2) {
+  // A run has to match this marker exactly. Asking for italic inside `**bold**`
+  // used to strip one star from each side, which turned the bold into italic
+  // rather than nesting the two.
+  const symbol = marker[0]
+  const wrapsExactly = (left: string, right: string) =>
+    trailingRun(left, symbol) === marker.length && leadingRun(right, symbol) === marker.length
+
+  if (inner.length >= marker.length * 2 && inner.startsWith(marker) && inner.endsWith(marker)
+    && leadingRun(inner, symbol) === marker.length && trailingRun(inner, symbol) === marker.length) {
     const stripped = inner.slice(marker.length, inner.length - marker.length)
     return { text: before + stripped + after, start, end: start + stripped.length }
   }
 
-  if (before.endsWith(marker) && after.startsWith(marker)) {
+  if (before.endsWith(marker) && after.startsWith(marker) && wrapsExactly(before, after)) {
     const trimmedBefore = before.slice(0, before.length - marker.length)
     const trimmedAfter = after.slice(marker.length)
     return {
@@ -44,6 +52,20 @@ export function toggleWrap(selection: Selection, marker: string): FormatResult {
 
   const wrapped = marker + inner + marker
   return { text: before + wrapped + after, start: start + marker.length, end: end + marker.length }
+}
+
+function leadingRun(text: string, char: string): number {
+  let n = 0
+  while (n < text.length && text[n] === char)
+    n += 1
+  return n
+}
+
+function trailingRun(text: string, char: string): number {
+  let n = 0
+  while (n < text.length && text[text.length - 1 - n] === char)
+    n += 1
+  return n
 }
 
 /** Turns the selection into a link, keeping it as the link text. */

@@ -1,5 +1,6 @@
 import type { ResolvedSlidevOptions } from '@slidev/types'
 import { readFile, writeFile } from 'node:fs/promises'
+import type { RawDeck } from './slide-source'
 import { joinDeck, prettifyRaw, splitDeck } from './slide-source'
 
 /**
@@ -63,8 +64,15 @@ export async function applyDeckAction(options: ResolvedSlidevOptions, payload: D
 
     case 'duplicate': {
       const ref = locate(options, payload.no)
-      await mutateFile(ref.filepath, (slides) => {
-        slides.splice(ref.index + 1, 0, slides[ref.index])
+      // The first slide of the entry file carries the deck's own configuration.
+      // Copying it verbatim gave the new slide `theme`, `title` and `info` as
+      // slide-level frontmatter, which the author then had to clean out by
+      // hand, so the copy keeps the body and drops that block.
+      const isHeadmatter = ref.filepath === options.data.entry.filepath && ref.index === 0
+      await mutateFile(ref.filepath, (slides, deck) => {
+        const source = slides[ref.index]
+        const copy = isHeadmatter ? withoutFrontmatter(deck.slides[ref.index], source) : source
+        slides.splice(ref.index + 1, 0, copy)
         return slides
       })
       return { ok: true, no: ref.no + 1, total: total + 1 }
@@ -100,10 +108,17 @@ export async function applyDeckAction(options: ResolvedSlidevOptions, payload: D
   }
 }
 
-async function mutateFile(filepath: string, mutate: (slides: string[]) => string[]) {
+/** The slide's body, without the frontmatter block in front of it. */
+function withoutFrontmatter(slide: { start: number, contentStart: number } | undefined, raw: string) {
+  if (!slide || slide.contentStart <= slide.start)
+    return raw
+  return raw.split('\n').slice(slide.contentStart - slide.start).join('\n').replace(/^\n+/, '')
+}
+
+async function mutateFile(filepath: string, mutate: (slides: string[], deck: RawDeck) => string[]) {
   const raw = await readFile(filepath, 'utf-8')
   const deck = splitDeck(raw)
-  const next = mutate(deck.slides.map(s => s.raw))
+  const next = mutate(deck.slides.map(s => s.raw), deck)
   const output = joinDeck(next)
   if (output !== raw)
     await writeFile(filepath, output, 'utf-8')

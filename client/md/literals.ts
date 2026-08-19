@@ -9,6 +9,37 @@
  * the inspector can fall back to a plain text field rather than mangling it.
  */
 
+/**
+ * Decodes the escape after a backslash in a JavaScript string literal.
+ *
+ * Taking the character as written deleted the backslash and kept the letter, so
+ * a list item reading `Line one\nLine two` came back as `Line onenLine two` and
+ * was written back that way: an edit to one item silently rewrote the others.
+ */
+function decodeEscape(char: string): string {
+  switch (char) {
+    case 'n': return '\n'
+    case 't': return '\t'
+    case 'r': return '\r'
+    case 'b': return '\b'
+    case 'f': return '\f'
+    case 'v': return '\v'
+    case '0': return '\0'
+    default: return char
+  }
+}
+
+/** Writes a value as a single-quoted literal that JavaScript can read back. */
+function quote(value: string): string {
+  const escaped = value
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, '\\\'')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t')
+  return `'${escaped}'`
+}
+
 export function parseStringArray(raw: string | null | undefined): string[] | null {
   if (!raw)
     return null
@@ -37,7 +68,7 @@ export function parseStringArray(raw: string | null | undefined): string[] | nul
 
     while (i < text.length) {
       if (text[i] === '\\') {
-        value += text[i + 1] ?? ''
+        value += decodeEscape(text[i + 1] ?? '')
         i += 2
         continue
       }
@@ -65,7 +96,7 @@ export function formatStringArray(items: string[], indent = '  '): string {
   if (!items.length)
     return '[]'
 
-  const quoted = items.map(item => `'${item.replace(/\\/g, '\\\\').replace(/'/g, '\\\'')}'`)
+  const quoted = items.map(item => quote(item))
   const inline = `[${quoted.join(', ')}]`
   if (items.length <= 2 && inline.length <= 60)
     return inline
@@ -132,7 +163,7 @@ export function parseObjectArray(raw: string | null | undefined): ObjectRow[] | 
 
 function readPrimitive(text: string): Primitive | undefined {
   if (/^'(?:[^'\\]|\\.)*'$/.test(text) || /^"(?:[^"\\]|\\.)*"$/.test(text))
-    return text.slice(1, -1).replace(/\\(['"\\])/g, '$1')
+    return text.slice(1, -1).replace(/\\(.)/g, (_, char) => decodeEscape(char))
   if (text === 'true' || text === 'false')
     return text === 'true'
   if (/^-?\d+(?:\.\d+)?$/.test(text))
@@ -158,7 +189,7 @@ export function formatObjectArray(rows: ObjectRow[], indent = '  '): string {
 function writePrimitive(value: Primitive): string {
   if (typeof value === 'number' || typeof value === 'boolean')
     return String(value)
-  return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+  return quote(value)
 }
 
 /** Splits on commas that are not inside a string, bracket or brace. */

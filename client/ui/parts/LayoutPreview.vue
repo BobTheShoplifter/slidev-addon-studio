@@ -2,6 +2,7 @@
 import type { CatalogLayout } from '../../types'
 import { computed, onErrorCaptured, ref, shallowRef, watchEffect } from 'vue'
 import { slideHeight, slideWidth } from '@slidev/client/env.ts'
+import { useDeckPaint } from '../../composables/useDeckPaint'
 
 /**
  * A thumbnail of what a layout does with a slide.
@@ -16,7 +17,13 @@ import { slideHeight, slideWidth } from '@slidev/client/env.ts'
  * The error boundary lives here rather than in a wrapper because the layout
  * vnode has to be created by the component that catches for it.
  */
-const props = defineProps<{ layout: CatalogLayout, frontmatter: Record<string, any> }>()
+const props = defineProps<{
+  layout: CatalogLayout
+  frontmatter: Record<string, any>
+  /** Stand-in body text, taken from the slide being edited. */
+  sample: { title: string, body: string }
+}>()
+
 
 /**
  * The slide's frontmatter drives the preview, but a layout it does not use will
@@ -65,8 +72,9 @@ const THUMBNAIL_WIDTH = 140
 const loaded = shallowRef<any>(null)
 const failed = ref(false)
 
+const paint = useDeckPaint()
 const scale = computed(() => THUMBNAIL_WIDTH / slideWidth.value)
-const boxStyle = computed(() => ({ height: `${scale.value * slideHeight.value}px` }))
+const boxStyle = computed(() => ({ height: `${scale.value * slideHeight.value}px`, ...paint.value }))
 const stageStyle = computed(() => ({
   width: `${slideWidth.value}px`,
   height: `${slideHeight.value}px`,
@@ -94,8 +102,8 @@ onErrorCaptured(() => {
   <div class="studio-layout-preview" :style="boxStyle">
     <div v-if="loaded && !failed" class="studio-layout-preview__stage" :style="stageStyle">
       <component :is="loaded" v-bind="previewProps">
-        <h1>Slide title</h1>
-        <p>Body text sits here, so the shape of the layout is visible.</p>
+        <h1>{{ props.sample.title }}</h1>
+        <p>{{ props.sample.body }}</p>
       </component>
     </div>
     <span v-else class="studio-card__placeholder">{{ layout.name }}</span>

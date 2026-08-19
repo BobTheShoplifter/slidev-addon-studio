@@ -36,14 +36,27 @@ so the editor lists whatever is in that folder.
 <Shape name="hexagon" :size="150" caption="A hexagon" />
 
 ---
+
+# Lists are rows, not blobs
+
+A prop holding records is edited as one row per entry, with a field per key.
+The fields come from the type the component declares, so an empty list still
+knows what it wants.
+
+<Milestones :items="[
+  { year: '2019', text: 'First talk', highlight: false },
+  { year: '2024', text: 'Fiftieth talk', highlight: true },
+]" />
+
+---
 layout: center
 ---
 
 # Drag anything
 
 <Note>
-Drag a block on the canvas and Studio wraps it in <code>v-drag</code>, writing
-the position back into the Markdown. The Element panel sends it back into the
+Drag a block on the canvas and Studio gives it a free position, writing the
+coordinates back into the Markdown. The Element panel sends it back into the
 document flow whenever you want.
 </Note>
 

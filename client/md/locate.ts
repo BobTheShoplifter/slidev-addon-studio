@@ -26,6 +26,11 @@ export interface Signature {
   sig?: string
   /** Normalised leading text for prose blocks. */
   text?: string
+  /**
+   * The element shares a Markdown block with siblings, so it does not begin a
+   * block of its own.
+   */
+  nested?: boolean
 }
 
 const FENCE = /^\s*(`{3,}|~{3,})/
@@ -36,18 +41,25 @@ export function resolveRange(content: string, hint: SourceRange | null, signatur
   if (hint && inBounds(hint, lines.length) && matches(lines.slice(hint[0], hint[1]).join('\n'), signature))
     return hint
 
+  // The sweep below can only find a block that starts a line. A nested tag
+  // never does, so it would match a *different* element that happens to share
+  // this one's signature: the panel would show one element while another was
+  // outlined, and Backspace would delete the wrong one.
+  if (signature.nested)
+    return null
+
   const candidates: number[] = []
   for (let i = 0; i < lines.length; i++) {
     if (startsBlock(lines, i) && matches(blockText(lines, i), signature))
       candidates.push(i)
   }
-  if (!candidates.length)
+
+  // Exactly one, or none. Choosing the nearest of several identical candidates
+  // is a guess, and the whole point of this module is that it does not guess.
+  if (candidates.length !== 1)
     return null
 
-  const anchor = hint?.[0] ?? 0
-  const start = candidates.reduce((best, current) =>
-    Math.abs(current - anchor) < Math.abs(best - anchor) ? current : best)
-
+  const start = candidates[0]
   return [start, blockEnd(lines, start)]
 }
 

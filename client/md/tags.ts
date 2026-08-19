@@ -136,15 +136,24 @@ export function writeAttr(
   const next = value === null ? '' : renderAttr(written, value, options)
 
   if (existing) {
-    const before = block.slice(0, existing.start)
-    const after = block.slice(existing.end)
     if (!next) {
-      // Drop the separator we would otherwise leave behind.
-      return `${before.replace(/\s+$/, '')}${after.startsWith(' ') ? after : ` ${after}`}`
-        .replace(/\s+>/, '>')
-        .replace(/\s+\/>/, ' />')
+      // Rebuild the attribute region and nothing else. Tidying the whole block
+      // with `.replace(/\s+>/, '>')` reached past the tag: on a block whose body
+      // reads "5 > 3", removing an attribute rewrote the prose instead.
+      const head = block.slice(tag.attrsStart, existing.start).replace(/\s+$/, '')
+      const rest = block.slice(existing.end, tag.attrsEnd)
+      // Whitespace that only separates the removed attribute from `>` is kept,
+      // so a tag written across several lines keeps its shape.
+      const tail = rest.trim() ? rest.replace(/^\s+/, ' ') : rest.replace(/^[^\S\n]+/, '')
+      let attrs = head + tail
+      if (attrs && !/^\s/.test(attrs))
+        attrs = ` ${attrs}`
+      // `<Pill />` keeps its space; `<div>` does not grow one.
+      if (!attrs && tag.selfClosing)
+        attrs = ' '
+      return block.slice(0, tag.attrsStart) + attrs + block.slice(tag.attrsEnd)
     }
-    return before + next + after
+    return block.slice(0, existing.start) + next + block.slice(existing.end)
   }
 
   if (!next)

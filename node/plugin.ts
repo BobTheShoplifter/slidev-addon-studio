@@ -2,6 +2,7 @@ import type { ResolvedSlidevOptions } from '@slidev/types'
 import type { Plugin } from 'vite'
 import { join, relative } from 'node:path'
 import { buildCatalog } from './catalog'
+import { readPalette } from './palette'
 import { assetRoot, listAssets, saveAsset } from './assets'
 import { applyDeckAction } from './deck'
 
@@ -53,7 +54,7 @@ export function studioPlugin(options: ResolvedSlidevOptions): Plugin {
       if (id !== RESOLVED_CATALOG)
         return null
       if (!isDev)
-        return 'export const components = []\nexport const layouts = []\nexport const config = {}\nexport const enabled = false\n'
+        return 'export const components = []\nexport const layouts = []\nexport const palette = []\nexport const config = {}\nexport const enabled = false\n'
       return renderCatalogModule(options)
     },
 
@@ -114,7 +115,7 @@ export function studioPlugin(options: ResolvedSlidevOptions): Plugin {
 
 async function handle(route: string, method: string, req: any, options: ResolvedSlidevOptions) {
   if (route === 'catalog' && method === 'GET')
-    return await buildCatalog(options)
+    return { ...await buildCatalog(options), palette: await readPalette(options) }
 
   if (route === 'assets' && method === 'GET')
     return { assets: await listAssets(options), root: assetRoot(options) }
@@ -155,6 +156,7 @@ export function studioConfig(options: ResolvedSlidevOptions): StudioConfig {
 
 async function renderCatalogModule(options: ResolvedSlidevOptions) {
   const catalog = await buildCatalog(options)
+  const palette = await readPalette(options)
   const config = studioConfig(options)
 
   const componentLoaders = catalog.components
@@ -171,6 +173,7 @@ async function renderCatalogModule(options: ResolvedSlidevOptions) {
     `const layoutLoaders = {\n${layoutLoaders}\n}`,
     `export const components = ${JSON.stringify(catalog.components)}.map(c => ({ ...c, load: componentLoaders[c.name] }))`,
     `export const layouts = ${JSON.stringify(catalog.layouts)}.map(l => ({ ...l, load: layoutLoaders[l.name] }))`,
+    `export const palette = ${JSON.stringify(palette)}`,
     `export const config = ${JSON.stringify(config)}`,
     `export const enabled = true`,
   ].join('\n\n')

@@ -145,10 +145,8 @@ export function useSelection(
     await nextTick()
     await new Promise(resolve => setTimeout(resolve, 80))
 
-    if (!hint || !slideElement(no())) {
-      selection.value = null
+    if (!hint || !slideElement(no()))
       return
-    }
 
     const candidates = mappedElements(no())
       .filter(el => (el.dataset.studioKind ?? 'unknown') === kind && el.dataset.studioTag === tag)
@@ -157,7 +155,11 @@ export function useSelection(
       .map(el => ({ el, start: parseHint(el.dataset.studioSrc)?.[0] ?? Number.POSITIVE_INFINITY }))
       .sort((a, b) => Math.abs(a.start - hint[0]) - Math.abs(b.start - hint[0]))[0]
 
-    selection.value = best ? describe(best.el, no(), content()) : null
+    // Keep what the user had if the element cannot be found this instant. An
+    // edit that briefly cannot be rebound used to empty the whole panel, which
+    // read as the editor losing the thing you were working on.
+    if (best)
+      selection.value = describe(best.el, no(), content())
   }
 
   /**
@@ -216,6 +218,7 @@ function describe(el: HTMLElement, no: number, content: string): StudioTarget {
     tag,
     sig: el.dataset.studioSig,
     text: tag ? undefined : normalise(textOf(el)),
+    nested: el.dataset.studioNested === '1',
   }
   const range = resolveRange(content, hint, signature)
 

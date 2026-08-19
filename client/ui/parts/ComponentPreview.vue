@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CatalogComponent } from '../../types'
 import { compile, computed, defineComponent, h, shallowRef, watchEffect } from 'vue'
+import { useDeckPaint } from '../../composables/useDeckPaint'
 
 /**
  * Renders the real component, not a screenshot, by compiling its example at
@@ -21,6 +22,13 @@ const PLACEHOLDER = defineComponent({
   name: 'StudioPlaceholder',
   render: () => h('span', { class: 'studio-card__placeholder' }, '…'),
 })
+
+/**
+ * A component is designed against the deck's colours, not the dock's. Rendered
+ * on the panel's dark background, anything the theme paints for a light slide
+ * disappears, so the preview tile borrows the deck's own paint.
+ */
+const paint = useDeckPaint()
 
 const loaded = shallowRef<any>(null)
 
@@ -64,7 +72,7 @@ const preview = computed(() => {
 </script>
 
 <template>
-  <div class="studio-card__preview">
+  <div class="studio-card__preview" :style="preview ? paint : undefined">
     <div v-if="preview" class="studio-card__preview-inner">
       <component :is="preview" />
     </div>

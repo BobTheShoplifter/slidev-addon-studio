@@ -16,8 +16,13 @@ export interface StudioContext {
   note: () => string
   canvas: ReturnType<typeof useSlideCanvas>
   gizmo: ReturnType<typeof useTransformGizmo>
-  /** Writes new Markdown for the current slide and restores the selection. */
-  commit: (content: string, label: string) => Promise<void>
+  /**
+   * Writes new Markdown for the current slide and restores the selection.
+   * `skipHmr` leaves the rendered slide alone for a change the caller has
+   * already painted; `keepSelection` then avoids re-finding an element that
+   * never went away.
+   */
+  commit: (content: string, label: string, options?: { skipHmr?: boolean, keepSelection?: boolean }) => Promise<void>
   setFrontmatter: (values: Record<string, any>, label: string) => Promise<void>
   setNote: (note: string) => Promise<void>
   /** Range of the current selection, or `null` when nothing is selected. */

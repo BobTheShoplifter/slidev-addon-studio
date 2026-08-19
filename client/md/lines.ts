@@ -48,6 +48,68 @@ export function append(content: string, text: string): string {
   return `${body}\n\n${text.trim()}\n`
 }
 
+const RE_FENCE = /^\s*(?:```|~~~)/
+const RE_OPEN = /<([A-Za-z][\w.-]*)(?:\s[^>]*?)?>/g
+const RE_CLOSE = /<\/([A-Za-z][\w.-]*)\s*>/g
+const RE_SELF_CLOSING = /<[A-Za-z][\w.-]*(?:\s[^>]*?)?\/>/g
+const VOID_TAGS = new Set(['br', 'hr', 'img', 'input', 'meta', 'link', 'source', 'track', 'wbr', 'area', 'base', 'col', 'embed', 'param'])
+
+/** How much this line opens (positive) or closes (negative) block markup. */
+function tagDelta(line: string): number {
+  const withoutSelfClosing = line.replace(RE_SELF_CLOSING, '')
+  const opened = [...withoutSelfClosing.matchAll(RE_OPEN)]
+    .filter(m => !VOID_TAGS.has(m[1].toLowerCase())).length
+  const closed = [...withoutSelfClosing.matchAll(RE_CLOSE)].length
+  return opened - closed
+}
+
+/**
+ * Where the block starting at `start` ends.
+ *
+ * A blank line usually separates two blocks, but not every blank line does: a
+ * `<v-clicks>` wrapper and a fenced code block both contain them. Treating
+ * every blank line as a boundary made reordering splice a block into the middle
+ * of its neighbour, which is the kind of edit that costs someone a slide.
+ */
+export function endOfBlock(lines: string[], start: number): number {
+  let depth = 0
+  let fenced = false
+  let i = start
+  for (; i < lines.length; i++) {
+    const line = lines[i]
+    if (RE_FENCE.test(line)) {
+      fenced = !fenced
+      continue
+    }
+    if (fenced)
+      continue
+    if (!line.trim() && depth <= 0)
+      break
+    depth += tagDelta(line)
+  }
+  return i
+}
+
+/** Where the block ending just before `end` starts. */
+export function startOfBlock(lines: string[], end: number): number {
+  let depth = 0
+  let fenced = false
+  let i = end
+  for (; i > 0; i--) {
+    const line = lines[i - 1]
+    if (RE_FENCE.test(line)) {
+      fenced = !fenced
+      continue
+    }
+    if (fenced)
+      continue
+    if (!line.trim() && depth <= 0)
+      break
+    depth -= tagDelta(line)
+  }
+  return i
+}
+
 /**
  * Swaps a block with its neighbour.
  *
@@ -66,9 +128,7 @@ export function moveBlock(content: string, range: SourceRange, direction: -1 | 1
     if (neighbourEnd === 0)
       return content
 
-    let neighbourStart = neighbourEnd
-    while (neighbourStart > 0 && lines[neighbourStart - 1].trim())
-      neighbourStart -= 1
+    const neighbourStart = startOfBlock(lines, neighbourEnd)
 
     const neighbour = lines.slice(neighbourStart, neighbourEnd)
     const separator = lines.slice(neighbourEnd, range[0])
@@ -82,9 +142,7 @@ export function moveBlock(content: string, range: SourceRange, direction: -1 | 1
   if (neighbourStart >= lines.length)
     return content
 
-  let neighbourEnd = neighbourStart
-  while (neighbourEnd < lines.length && lines[neighbourEnd].trim())
-    neighbourEnd += 1
+  const neighbourEnd = endOfBlock(lines, neighbourStart)
 
   const neighbour = lines.slice(neighbourStart, neighbourEnd)
   const separator = lines.slice(range[1], neighbourStart)

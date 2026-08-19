@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { clearClicks, findWrapper, readClicks, writeClicks } from '../client/md/clicks'
-import { readClasses, writeClasses } from '../client/md/classes'
+import { canStyle, readClasses, writeClasses } from '../client/md/classes'
 import { formatPos, parsePos, readDrag, removeDrag, writeDrag } from '../client/md/drag'
 import { toggleBullet, toggleHeading, toggleQuote, toggleWrap, toLink } from '../client/md/format'
 import { formatValue, patchFrontmatterRaw } from '../client/md/frontmatter'
+import { readMotion, writeMotion } from '../client/md/motion'
 import type { ObjectRow } from '../client/md/literals'
 import { formatObjectArray, formatStringArray, isArrayType, isColorValue, parseObjectArray, parseStringArray } from '../client/md/literals'
 import { getBlock, insertAfter, moveBlock, removeBlock, replaceBlock, unwrap } from '../client/md/lines'
@@ -57,6 +58,51 @@ describe('lines', () => {
   })
 })
 
+describe('block boundaries', () => {
+  const WRAPPED = [
+    '# Title', // 0
+    '', // 1
+    '<v-clicks>', // 2
+    '', // 3
+    '- one', // 4
+    '- two', // 5
+    '', // 6
+    '</v-clicks>', // 7
+    '', // 8
+    '<Pill>Last</Pill>', // 9
+  ].join('\n')
+
+  it('moves a block past a wrapper that contains blank lines', () => {
+    // The wrapper is one block, so the heading has to land after `</v-clicks>`,
+    // not inside it.
+    const next = moveBlock(WRAPPED, [0, 1], 1).split('\n')
+    expect(next.slice(0, 6)).toEqual(['<v-clicks>', '', '- one', '- two', '', '</v-clicks>'])
+    expect(next[7]).toBe('# Title')
+    expect(next.filter(line => line === '# Title')).toHaveLength(1)
+    expect(next.join('\n')).toContain('<Pill>Last</Pill>')
+  })
+
+  it('moves a block back past a wrapper in one piece', () => {
+    const next = moveBlock(WRAPPED, [9, 10], -1).split('\n')
+    expect(next.slice(2, 4)).toEqual(['<Pill>Last</Pill>', ''])
+    expect(next.slice(4, 10)).toEqual(['<v-clicks>', '', '- one', '- two', '', '</v-clicks>'])
+  })
+
+  it('treats a fenced code block with blank lines as one block', () => {
+    const FENCED = [
+      '# Title',
+      '',
+      '```ts',
+      'const a = 1',
+      '',
+      'const b = 2',
+      '```',
+    ].join('\n')
+    const next = moveBlock(FENCED, [0, 1], 1).split('\n')
+    expect(next).toEqual(['```ts', 'const a = 1', '', 'const b = 2', '```', '', '# Title'])
+  })
+})
+
 describe('tags', () => {
   it('parses the opening tag of a block', () => {
     const tag = firstTag('<Pill color="red">Hi</Pill>')
@@ -90,6 +136,22 @@ describe('tags', () => {
 
   it('keeps a self-closing tag self-closing', () => {
     expect(writeAttr('<Mascot name="shield" />', 'v-click', true)).toBe('<Mascot name="shield" v-click />')
+  })
+
+  it('removes an attribute without touching the block body', () => {
+    // A tidy-up applied to the whole block used to rewrite the first "space >"
+    // it found anywhere, which on this block is the prose, not the tag.
+    const block = '<Note v-click class="lead">\n5 > 3, and 2 > 1\n</Note>'
+    expect(writeAttr(block, 'v-click', null)).toBe('<Note class="lead">\n5 > 3, and 2 > 1\n</Note>')
+
+    expect(writeAttr('<div class="x">a > b</div>', 'class', null)).toBe('<div>a > b</div>')
+    expect(writeAttr('<Pill v-click />', 'v-click', null)).toBe('<Pill />')
+    expect(writeAttr('<Shape name="hex" :size="150" />', 'name', null)).toBe('<Shape :size="150" />')
+  })
+
+  it('keeps a multi-line tag on its own lines when an attribute goes', () => {
+    const block = '<Milestones\n  :items="[]"\n  accent="red"\n/>'
+    expect(writeAttr(block, 'accent', null)).toBe('<Milestones\n  :items="[]"\n/>')
   })
 })
 
@@ -193,6 +255,28 @@ describe('classes', () => {
     expect(next).toContain('#intro')
     expect(next).toContain('.big')
   })
+
+  it('refuses a block whose trailing attributes would land elsewhere', () => {
+    // MDC attaches to the last element on the line: on a list that is the final
+    // `<li>`, on a quote the paragraph inside it, never the block itself.
+    const list = '- one\n- two'
+    expect(canStyle(list, [0, 2], true)).toBe(false)
+    expect(writeClasses(list, [0, 2], 'text-red')).toBe(list)
+
+    const quote = '> quoted'
+    expect(canStyle(quote, [0, 1], true)).toBe(false)
+
+    const paragraph = 'line one\nline two'
+    expect(canStyle(paragraph, [0, 2], true)).toBe(false)
+    expect(writeClasses(paragraph, [0, 2], 'text-red')).toBe(paragraph)
+  })
+
+  it('still styles a one-line paragraph or heading', () => {
+    expect(canStyle('Some text', [0, 1], true)).toBe(true)
+    expect(canStyle('# Title', [0, 1], true)).toBe(true)
+    // A tag takes a real class attribute, MDC or not.
+    expect(canStyle('<Pill>Hi</Pill>', [0, 1], false)).toBe(true)
+  })
 })
 
 describe('locate', () => {
@@ -219,6 +303,20 @@ describe('locate', () => {
 
   it('refuses to guess when nothing matches', () => {
     expect(resolveRange(SLIDE, [0, 1], { kind: 'heading', text: 'a different heading entirely' })).toBeNull()
+  })
+
+  it('refuses a nested tag rather than matching one of its siblings', () => {
+    // The sweep can only find blocks that begin a line, so for a tag inside a
+    // wrapper the only honest answers are the hint or nothing.
+    const source = '<Pill>A</Pill>\n\n<div class="row"><Pill>B</Pill></div>'
+    const nested = { kind: 'component' as const, tag: 'Pill', nested: true }
+    expect(resolveRange(source, [99, 100], nested)).toBeNull()
+    expect(resolveRange(source, null, nested)).toBeNull()
+  })
+
+  it('refuses when several blocks match equally well', () => {
+    const source = '<Pill>Hi</Pill>\n\n<Pill>Hi</Pill>'
+    expect(resolveRange(source, [9, 10], { kind: 'component', tag: 'Pill' })).toBeNull()
   })
 
   it('keeps a fenced code block whole', () => {
@@ -333,6 +431,41 @@ describe('inline formatting', () => {
   })
 })
 
+describe('inline formatting', () => {
+  const sel = (text: string, start: number, end: number) => ({ text, start, end })
+
+  it('nests italic inside bold instead of eating it', () => {
+    expect(toggleWrap(sel('**abc**', 2, 5), '*').text).toBe('***abc***')
+    expect(toggleWrap(sel('**abc**', 0, 7), '*').text).toBe('***abc***')
+  })
+
+  it('still removes a marker that matches exactly', () => {
+    expect(toggleWrap(sel('**abc**', 2, 5), '**').text).toBe('abc')
+    expect(toggleWrap(sel('*abc*', 1, 4), '*').text).toBe('abc')
+    expect(toggleWrap(sel('**abc**', 0, 7), '**').text).toBe('abc')
+  })
+
+  it('wraps a plain selection', () => {
+    expect(toggleWrap(sel('abc', 0, 3), '**').text).toBe('**abc**')
+    expect(toggleWrap(sel('one two', 4, 7), '`').text).toBe('one `two`')
+  })
+})
+
+describe('literal escapes', () => {
+  it('decodes escapes rather than dropping the backslash', () => {
+    expect(parseStringArray("['Line one\\nLine two']")).toEqual(['Line one\nLine two'])
+    expect(parseStringArray("['it\\'s here']")).toEqual(["it's here"])
+    expect(parseStringArray("['C:\\\\path']")).toEqual(['C:\\path'])
+  })
+
+  it('round trips a value that contains a newline or a quote', () => {
+    for (const value of ['Line one\nLine two', "it's here", 'tab\there', 'back\\slash']) {
+      expect(parseStringArray(formatStringArray([value]))).toEqual([value])
+      expect(parseObjectArray(formatObjectArray([{ text: value }]))).toEqual([{ text: value }])
+    }
+  })
+})
+
 describe('frontmatter', () => {
   const RAW = [
     'layout: split',
@@ -370,6 +503,19 @@ describe('frontmatter', () => {
     expect(formatValue('- leading dash')).toBe('"- leading dash"')
     expect(formatValue('')).toBe('""')
     expect(formatValue('say "hi"')).toBe('"say \\"hi\\""')
+  })
+
+  it('writes a list as a list, not as joined text', () => {
+    expect(formatValue(['one', 'two'])).toBe('[one, two]')
+    expect(formatValue(['yes', '12'])).toBe('["yes", "12"]')
+    expect(patchFrontmatterRaw(RAW, { colors: ['red', 'blue'] }).raw).toContain('colors: [red, blue]')
+  })
+
+  it('refuses a value no single line can hold', () => {
+    const { raw, unhandled } = patchFrontmatterRaw(RAW, { drawings: { persist: false } })
+    expect(unhandled).toEqual(['drawings'])
+    expect(raw).toBe(RAW)
+    expect(patchFrontmatterRaw(RAW, { items: [{ a: 1 }] }).unhandled).toEqual(['items'])
   })
 
   it('refuses to rewrite a value that spans lines', () => {
@@ -416,5 +562,28 @@ describe('object arrays', () => {
 
   it('drops empty fields rather than writing blanks', () => {
     expect(formatObjectArray([{ date: '2024', text: '' }])).toBe("[\n  { date: '2024' },\n]")
+  })
+})
+
+describe('motion', () => {
+  const BLOCK = '<Pill>Hi</Pill>'
+
+  it('reads back the delay it wrote', () => {
+    const next = writeMotion(BLOCK, [0, 1], 'slide-up', 400)
+    expect(readMotion(next, [0, 1])).toEqual({ preset: 'slide-up', delay: 400 })
+  })
+
+  it('reports no motion and no delay on a plain block', () => {
+    expect(readMotion(BLOCK, [0, 1])).toEqual({ preset: null, delay: 0 })
+  })
+
+  it('calls a hand-written motion custom rather than none', () => {
+    const hand = '<Pill motion :initial="{ x: 5 }" :enter="{ x: 0 }">Hi</Pill>'
+    expect(readMotion(hand, [0, 1]).preset).toBe('custom')
+  })
+
+  it('removes every attribute it added', () => {
+    const next = writeMotion(BLOCK, [0, 1], 'zoom', 100)
+    expect(writeMotion(next, [0, 1], null)).toBe(BLOCK)
   })
 })

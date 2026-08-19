@@ -31,10 +31,13 @@ watch([range, () => studio.content()], () => {
   if (!range.value) {
     state.value = { ...EMPTY_CLICKS }
     motion.value = null
+    motionDelay.value = 0
     return
   }
   state.value = readClicks(studio.content(), range.value)
-  motion.value = readMotion(studio.content(), range.value)
+  const current = readMotion(studio.content(), range.value)
+  motion.value = current.preset
+  motionDelay.value = current.delay
 }, { immediate: true })
 
 const canStagger = computed(() => selection.value?.kind === 'list')
@@ -166,9 +169,14 @@ const TRANSITIONS = ['', 'fade', 'fade-out', 'slide-left', 'slide-right', 'slide
             <option v-for="preset in MOTION_PRESETS" :key="preset.id" :value="preset.id">
               {{ preset.label }}
             </option>
+            <!-- A motion written by hand matches no preset. Naming it keeps the
+                 control from reading as "None" over an element that moves. -->
+            <option v-if="motion === 'custom'" value="custom" disabled>
+              Custom, written by hand
+            </option>
           </select>
         </StudioField>
-        <StudioField v-if="motion" label="Delay (ms)">
+        <StudioField v-if="motion && motion !== 'custom'" label="Delay (ms)">
           <input v-model.number="motionDelay" type="number" min="0" step="50" @change="applyMotion(motion!)">
         </StudioField>
       </template>

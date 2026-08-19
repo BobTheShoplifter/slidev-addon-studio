@@ -12,8 +12,29 @@ import { findAttr, opensWithTag, writeAttr } from './tags'
 
 const RE_MDC_ATTRS = /\{([^{}]*)\}\s*$/
 
+/**
+ * Whether a trailing `{.class}` would land on the block itself.
+ *
+ * MDC attaches the attributes to the last element on that line, which for a
+ * one-line paragraph or heading is the block. On a list it lands on the final
+ * `<li>`, on a quote on the paragraph inside it, and on a paragraph written
+ * across several lines on a `<span>` around the last few words. Writing one
+ * there styles something the author did not select, so it is refused instead.
+ */
+function mdcTargetsBlock(block: string): boolean {
+  const trimmed = block.trim()
+  if (!trimmed || trimmed.includes('\n'))
+    return false
+  if (/^(?:[-*+]|\d+[.)])\s/.test(trimmed))
+    return false
+  if (trimmed.startsWith('>') || trimmed.startsWith('|'))
+    return false
+  return !/^(?:`{3,}|~{3,})/.test(trimmed)
+}
+
 export function canStyle(content: string, range: SourceRange, mdcEnabled: boolean): boolean {
-  return !!opensWithTag(getBlock(content, range)) || mdcEnabled
+  const block = getBlock(content, range)
+  return !!opensWithTag(block) || (mdcEnabled && mdcTargetsBlock(block))
 }
 
 export function readClasses(content: string, range: SourceRange): string {
@@ -36,6 +57,11 @@ export function writeClasses(content: string, range: SourceRange, classes: strin
 
   if (opensWithTag(block))
     return replaceBlock(content, range, writeAttr(block, 'class', list.length ? list.join(' ') : null))
+
+  // Refuse rather than write a class onto a different element than the one
+  // selected. `canStyle` keeps the field out of the panel for these.
+  if (!mdcTargetsBlock(block))
+    return content
 
   const lines = block.split('\n')
   const last = lines.length - 1

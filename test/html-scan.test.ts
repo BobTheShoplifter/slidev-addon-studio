@@ -90,4 +90,17 @@ describe('multi-line tags', () => {
     const [tag] = scanTags('<Pill color="red">Hi</Pill>')
     expect([tag.startLine, tag.endLine]).toEqual([0, 1])
   })
+
+  it('records where each tag opens, even past a "<" in an attribute value', () => {
+    const html = '<Pill label="a < b">Hi</Pill>'
+    const [tag] = scanTags(html)
+    expect(tag.start).toBe(0)
+    expect(html.slice(tag.start, tag.insertAt)).toBe('<Pill label="a < b"')
+  })
+
+  it('reports nesting depth, not scan order', () => {
+    const html = '<div class="a">A</div>\n<div class="b"><Pill>B</Pill></div>'
+    const tags = scanTags(html)
+    expect(tags.map(t => `${t.name}:${t.depth}`)).toEqual(['div:0', 'div:0', 'Pill:1'])
+  })
 })

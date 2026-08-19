@@ -4,6 +4,7 @@ import { computed, onErrorCaptured, ref } from 'vue'
 import { slideHeight, slideWidth } from '@slidev/client/env.ts'
 import { createFixedClicks } from '@slidev/client/composables/useClicks.ts'
 import SlideWrapper from '@slidev/client/internals/SlideWrapper.vue'
+import { useDeckPaint } from '../../composables/useDeckPaint'
 
 /**
  * A slide rendered small.
@@ -18,11 +19,13 @@ const props = defineProps<{ route: SlideRoute, width?: number }>()
 const THUMBNAIL_WIDTH = 132
 const failed = ref(false)
 
+const paint = useDeckPaint()
 const width = computed(() => props.width ?? THUMBNAIL_WIDTH)
 const scale = computed(() => width.value / slideWidth.value)
 const boxStyle = computed(() => ({
   width: `${width.value}px`,
   height: `${scale.value * slideHeight.value}px`,
+  ...paint.value,
 }))
 const stageStyle = computed(() => ({
   width: `${slideWidth.value}px`,

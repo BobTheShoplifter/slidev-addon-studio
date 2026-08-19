@@ -32,6 +32,14 @@ export function patchFrontmatterRaw(raw: string, values: Record<string, unknown>
   const unhandled: string[] = []
 
   for (const [key, value] of Object.entries(values)) {
+    // A structure a single line cannot hold. Writing one anyway produced
+    // `key: [object Object]`, or a list flattened to `a,b`, which YAML then
+    // reads back as an ordinary string.
+    if (!isWritable(value)) {
+      unhandled.push(key)
+      continue
+    }
+
     const index = lines.findIndex((line) => {
       const match = line.match(RE_KEY)
       return !!match && match[1] === '' && match[2] === key
@@ -66,10 +74,23 @@ function spansMultipleLines(lines: string[], index: number) {
   return !!next && /^\s+\S/.test(next) && !RE_KEY.test(next)
 }
 
+/** Whether a value can be written as one line of YAML without losing its type. */
+function isWritable(value: unknown): boolean {
+  if (value === null || value === undefined)
+    return true
+  if (Array.isArray(value))
+    return value.every(item => ['string', 'number', 'boolean'].includes(typeof item))
+  return typeof value !== 'object'
+}
+
 /** Quotes only when YAML would otherwise read the value as something else. */
 export function formatValue(value: unknown): string {
   if (typeof value === 'boolean' || typeof value === 'number')
     return String(value)
+
+  // A flow sequence, so a list stays a list rather than becoming "a,b".
+  if (Array.isArray(value))
+    return `[${value.map(item => formatValue(item)).join(', ')}]`
 
   const text = String(value)
   const needsQuotes = text === ''

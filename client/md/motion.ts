@@ -28,15 +28,36 @@ export const MOTION_PRESETS: MotionPreset[] = [
   { id: 'tilt', label: 'Tilt in', initial: { rotate: -6, y: 30, opacity: 0 }, enter: { rotate: 0, y: 0, opacity: 1 } },
 ]
 
-export function readMotion(content: string, range: SourceRange): string | null {
+export interface MotionState {
+  /** Preset id, `custom` for a hand-written motion, or `null` for none. */
+  preset: string | null
+  /** Delay in milliseconds, as written in the `enter` transition. */
+  delay: number
+}
+
+/**
+ * Reads the motion on a block, delay included.
+ *
+ * The delay used to be panel state only, never read back, so reselecting an
+ * element showed 0 over a source that said 400, and the next preset change
+ * wrote that 0 over the author's value.
+ */
+export function readMotion(content: string, range: SourceRange): MotionState {
+  const none: MotionState = { preset: null, delay: 0 }
   const block = getBlock(content, range)
   if (!opensWithTag(block))
-    return null
+    return none
+
   const initial = findAttr(block, 'initial')
   if (!initial?.value)
-    return null
+    return none
+
   const match = MOTION_PRESETS.find(preset => normalise(preset.initial) === normalise(parseObject(initial.value!)))
-  return match?.id ?? 'custom'
+  const enter = parseObject(findAttr(block, 'enter')?.value ?? '')
+  const transition = (enter.transition ?? {}) as { delay?: unknown }
+  const delay = Number(transition.delay)
+
+  return { preset: match?.id ?? 'custom', delay: Number.isFinite(delay) ? delay : 0 }
 }
 
 export function writeMotion(content: string, range: SourceRange, presetId: string | null, delay = 0): string {

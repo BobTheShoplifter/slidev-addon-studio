@@ -28,7 +28,13 @@
   box-sizing: border-box;
 }
 
-.slidev-studio button {
+/*
+ * Wrapped in :where() so it carries no specificity. As a plain
+ * `.slidev-studio button` rule it outranked every single-class rule below it,
+ * which silently stripped the background and border from the colour swatch,
+ * the palette chips and `.studio-button`.
+ */
+:where(.slidev-studio button) {
   font: inherit;
   color: inherit;
   background: none;
@@ -433,9 +439,51 @@
 }
 
 .studio-color {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* The theme's own colours, offered before an arbitrary wheel. */
+.studio-palette {
+  position: absolute;
+  top: calc(100% + 4px);
+  /* Anchored to the field's right edge: the swatch sits near the window edge,
+     so opening from the left pushed half the palette off screen. */
+  right: 0;
+  left: auto;
+  z-index: 97;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: max-content;
+  max-width: 240px;
+  padding: 6px;
+  background: var(--studio-bg);
+  border: 1px solid var(--studio-border);
+  border-radius: var(--studio-radius);
+  box-shadow: var(--studio-shadow);
+}
+
+.studio-palette__chip {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--studio-border);
+  border-radius: 4px;
+}
+
+.studio-palette__chip:hover {
+  border-color: var(--studio-accent);
+}
+
+.studio-palette__custom {
+  width: 100%;
+  padding: 3px;
+  color: var(--studio-text-dim);
+  font-size: 11px;
+  text-align: center;
+  border-top: 1px solid var(--studio-border);
 }
 
 .studio-row {
@@ -741,11 +789,20 @@
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * Beside a thumbnail there is little width left, and a single clipped line
+ * turned every title into "Click to…". Two wrapped lines fit the row height a
+ * thumbnail already sets, so most titles now read in full.
+ */
 .studio-slide-row__title {
+  display: -webkit-box;
   flex: 1;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* `anywhere` also shrinks the min-content width, which broke titles in the
+     middle of a word even when there was room to wrap at a space. */
+  overflow-wrap: break-word;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .studio-slide-row__actions {

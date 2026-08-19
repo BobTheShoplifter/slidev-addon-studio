@@ -53,3 +53,10 @@ declare module '@slidev/client/composables/useSlideInfo.ts' {
     update: (data: SlidePatch, newId?: number) => Promise<SlideInfo | void>
   }
 }
+
+declare module '@slidev/client/logic/dark.ts' {
+  import type { WritableComputedRef } from 'vue'
+
+  export const isDark: WritableComputedRef<boolean>
+  export function toggleDark(value?: boolean): boolean
+}

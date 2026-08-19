@@ -17,6 +17,10 @@ export interface ScannedTag {
   startLine: number
   /** Line after the element's last line, relative to the start of the block. */
   endLine: number
+  /** Offset of the tag's own `<` in the source. */
+  start: number
+  /** How many open elements enclose this one. Zero for a top-level tag. */
+  depth: number
   /** Offset in the source at which an attribute can be inserted. */
   insertAt: number
   attrs: string
@@ -72,6 +76,8 @@ export function scanTags(html: string): ScannedTag[] {
       startLine,
       // Until a closing tag says otherwise, an element owns only its own tag.
       endLine: tagEndLine + 1,
+      start: match.index,
+      depth: open.length,
       insertAt: match.index + 1 + name.length + attrs.length,
       attrs,
       selfClosing: selfClose === '/',

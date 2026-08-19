@@ -29,6 +29,26 @@ const layoutProps = computed(() => {
   return (active?.props ?? []).filter(p => !p.hidden && !RESERVED.has(p.name))
 })
 
+/**
+ * Thumbnails read better as this slide under another layout than as a generic
+ * diagram, so they borrow the slide's own heading and first line of prose.
+ * Taken from the Markdown rather than the DOM, which keeps it reactive and
+ * costs nothing when the slide changes.
+ */
+const sample = computed(() => {
+  const lines = studio.content().split(/\r?\n/)
+  const heading = lines.find(line => /^#{1,3}\s+\S/.test(line))
+  const body = lines.find(line => /^[A-Za-z(\u00C0-\u024F"']/.test(line.trim()) && !/^#{1,6}\s/.test(line.trim()))
+  const clip = (text: string, max: number) => {
+    const flat = text.replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim()
+    return flat.length > max ? `${flat.slice(0, max).trimEnd()}\u2026` : flat
+  }
+  return {
+    title: heading ? clip(heading.replace(/^#+\s*/, ''), 60) : 'Slide title',
+    body: body ? clip(body, 120) : 'Body text sits here, so the shape of the layout is visible.',
+  }
+})
+
 /** Keys Slidev owns, already offered below under Slide. */
 const RESERVED = new Set(['title', 'class', 'clicks', 'hide', 'level', 'layout', 'transition', 'zoom', 'preload', 'src', 'routeAlias'])
 
@@ -63,6 +83,14 @@ watch(() => studio.note(), value => (note.value = value), { immediate: true })
 function set(key: string, value: unknown) {
   return studio.setFrontmatter({ [key]: value === '' ? null : value }, `Set ${key}`)
 }
+
+/**
+ * An emptied number field means "unset", not zero. Coercing the empty string
+ * with `+` wrote `zoom: 0`, which renders the slide as nothing at all.
+ */
+function numberOrNull(value: string) {
+  return value.trim() === '' ? null : Number(value)
+}
 </script>
 
 <template>
@@ -79,7 +107,7 @@ function set(key: string, value: unknown) {
         :title="layout.description ?? `${layout.name} (${layout.origin})`"
         @click="set('layout', layout.name)"
       >
-        <LayoutPreview :layout="layout" :frontmatter="frontmatter" />
+        <LayoutPreview :layout="layout" :frontmatter="frontmatter" :sample="sample" />
         <span class="studio-card__label">
           <span class="studio-card__name">{{ layout.name }}</span>
           <span class="studio-card__meta">{{ layout.origin }}</span>
@@ -118,7 +146,7 @@ function set(key: string, value: unknown) {
       <input type="text" :value="frontmatter.background ?? ''" placeholder="/cover.png or #101014" @change="set('background', ($event.target as HTMLInputElement).value)">
     </StudioField>
     <StudioField label="Zoom">
-      <input type="number" step="0.05" min="0.2" max="3" :value="frontmatter.zoom ?? 1" @change="set('zoom', +($event.target as HTMLInputElement).value)">
+      <input type="number" step="0.05" min="0.2" max="3" :value="frontmatter.zoom ?? 1" @change="set('zoom', numberOrNull(($event.target as HTMLInputElement).value))">
     </StudioField>
     <StudioField label="Clicks">
       <input
@@ -127,7 +155,7 @@ function set(key: string, value: unknown) {
         :value="frontmatter.clicks ?? ''"
         placeholder="auto"
         title="Force a number of click steps, e.g. to hold on the last one"
-        @change="set('clicks', ($event.target as HTMLInputElement).value ? +($event.target as HTMLInputElement).value : '')"
+        @change="set('clicks', numberOrNull(($event.target as HTMLInputElement).value))"
       >
     </StudioField>
     <StudioField label="Hide">
