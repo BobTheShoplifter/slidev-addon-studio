@@ -893,6 +893,18 @@ html.slidev-studio-docked #slide-content object {
   pointer-events: none;
 }
 
+/*
+ * Slidev's own controls sit invisibly over the slide's bottom left corner and
+ * take the pointer, so a block in that strip could be seen but never clicked.
+ * The canvas wins while the editor is open: Studio's toolbar carries undo,
+ * redo, the grid, the outlines and closing, and every navigation shortcut still
+ * works from the keyboard.
+ */
+html.slidev-studio-docked #slide-container > div:has(> nav),
+html.slidev-studio-docked #slide-container > div:has(> nav) * {
+  pointer-events: none;
+}
+
 html.slidev-studio-docked #page-root {
   transform: translateY(var(--studio-deck-offset)) scale(var(--studio-deck-scale));
   transform-origin: 0 0;

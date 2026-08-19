@@ -33,7 +33,7 @@ Select the shape and the Element panel offers its props. The picker below is not
 hardcoded: `Shape.vue` declares that its `name` prop comes from `./shapes/*.svg`,
 so the editor lists whatever is in that folder.
 
-<Shape name="hexagon" :size="220" caption="A hexagon" v-drag="[56,153,220,NaN]" />
+<Shape name="hexagon" :size="150" caption="A hexagon" />
 
 ---
 
@@ -97,4 +97,4 @@ Paragraph one of the probe.
 - alpha
 - beta
 
-<Badge label="probe" />
+<Badge label="second" />

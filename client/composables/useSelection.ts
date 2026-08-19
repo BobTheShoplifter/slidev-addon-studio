@@ -77,6 +77,23 @@ export function useSelection(
     return candidates.length ? describe(candidates[0].el, no(), content()) : null
   }
 
+  /**
+   * What the pointer is over, ignoring Studio's own chrome on top of it.
+   *
+   * The selection overlay covers the block it belongs to, so the ordinary
+   * target of a click there is the overlay rather than anything on the slide.
+   */
+  function throughChrome(x: number, y: number): StudioTarget | null {
+    for (const node of document.elementsFromPoint(x, y)) {
+      if (isStudioChrome(node))
+        continue
+      const target = targetFrom(node)
+      if (target)
+        return target
+    }
+    return targetFromPoint(x, y)
+  }
+
   function select(node: EventTarget | null) {
     const target = targetFrom(node)
     if (target)
@@ -124,11 +141,16 @@ export function useSelection(
 
     // The first click of a double click selects, which lays the move overlay
     // over the block, so the second click lands on the overlay rather than on
-    // the text. Editing the selection is exactly what was asked for.
+    // the text. What is under the pointer is what was aimed at, so the overlay
+    // is looked through rather than treated as the answer: double clicking a
+    // nested block inside a selected container edits that block, not the
+    // container.
     if (event.target instanceof Element && event.target.closest('.studio-move')) {
-      if (!selection.value?.range)
+      const beneath = throughChrome(event.clientX, event.clientY) ?? selection.value
+      if (!beneath?.range)
         return
       event.preventDefault()
+      selection.value = beneath
       editing.value = true
       return
     }

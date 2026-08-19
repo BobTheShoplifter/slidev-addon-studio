@@ -17,6 +17,17 @@ export type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
  */
 const DRAG_THRESHOLD = 4
 
+/**
+ * How far the pointer must travel before a block that is still in the document
+ * flow is given a free position.
+ *
+ * Higher than the ordinary threshold because this one rewrites the Markdown's
+ * shape rather than four numbers in it: a couple of pixels of hand drift
+ * between the two clicks of a double click was enough to leave a `<v-drag>`
+ * behind, on a gesture that meant "let me edit this text".
+ */
+const PROMOTE_THRESHOLD = 12
+
 /** How much of an element must stay on the canvas, in canvas units. */
 const MIN_ON_CANVAS = 24
 
@@ -65,10 +76,21 @@ export function useTransformGizmo(context: {
   let painted: HTMLElement | null = null
   let restore = ''
   let startNo = 0
+  let lastPress = { at: 0, x: 0, y: 0 }
 
   function start(event: PointerEvent, next: Gesture) {
     const current = context.getTarget()
     if (!current || !current.range)
+      return
+
+    // The second press of a double click is not a gesture. Left armed, a hand
+    // that drifts while double clicking drags the block instead of opening it
+    // for editing.
+    const now = Date.now()
+    const doubleClick = now - lastPress.at < 350
+      && Math.hypot(event.clientX - lastPress.x, event.clientY - lastPress.y) < 6
+    lastPress = { at: now, x: event.clientX, y: event.clientY }
+    if (doubleClick)
       return
 
     event.preventDefault()
@@ -122,7 +144,7 @@ export function useTransformGizmo(context: {
 
     if (!active.value) {
       const travelled = Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y)
-      if (travelled < DRAG_THRESHOLD)
+      if (travelled < (hadPosition ? DRAG_THRESHOLD : PROMOTE_THRESHOLD))
         return
       begin()
     }
