@@ -14,9 +14,16 @@ Press <kbd>E</kbd> to open the editor, then click anything on this slide.
 
 ---
 
-# Title
+# Click to select
 
-See the [docs](https://sli.dev) and `npm i` for more.
+Every block here maps back to a line in `playground/slides.md`.
+Select one and the Element panel shows the exact Markdown behind it.
+
+- Headings, paragraphs, lists and quotes
+- Plain HTML elements
+- Vue components
+
+<Badge label="a component" />
 
 ---
 
@@ -42,6 +49,7 @@ knows what it wants.
 ]" />
 
 ---
+layout: center
 ---
 
 # Drag anything
@@ -79,3 +87,7 @@ layout: center
 
 Close the editor, open `playground/slides.md`, and every change you made is
 there as an ordinary diff.
+
+---
+
+# MARKER-DELTA
