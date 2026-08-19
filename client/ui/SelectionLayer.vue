@@ -29,6 +29,26 @@ function rotationOf(el: Element): number {
   return Math.round(Math.atan2(matrix.b, matrix.a) * 180 / Math.PI)
 }
 
+/**
+ * The element the rotation is actually on.
+ *
+ * A block wrapped in `<v-drag>` is not turned itself: Slidev turns the
+ * container it puts around it, so reading only the block's own transform found
+ * nothing and the frame fell back to the upright box containing the rotation.
+ * A scale, which is what the deck and the dock apply further up, is not a
+ * rotation and reads as zero degrees.
+ */
+function turnedElement(el: HTMLElement): { el: HTMLElement, rotate: number } {
+  let node: HTMLElement | null = el
+  for (let depth = 0; node && depth < 3; depth++) {
+    const rotate = rotationOf(node)
+    if (rotate)
+      return { el: node, rotate }
+    node = node.parentElement
+  }
+  return { el, rotate: 0 }
+}
+
 const selectionRect = ref<Rect | null>(null)
 const hoverRect = ref<Rect | null>(null)
 const outlineRects = ref<Rect[]>([])
@@ -48,18 +68,18 @@ function rectOf(el: Element | null | undefined): Rect | null {
   if (!bounds.width && !bounds.height)
     return null
 
-  const rotate = rotationOf(el)
-  if (!rotate)
+  const turned = turnedElement(el as HTMLElement)
+  if (!turned.rotate)
     return { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height, rotate: 0 }
 
   const { rect, scale } = studio.canvas
-  const box = studio.canvas.boxOf(el)
+  const box = studio.canvas.boxOf(turned.el)
   return {
     left: rect.value.left + box.x * scale.value,
     top: rect.value.top + box.y * scale.value,
     width: box.w * scale.value,
     height: box.h * scale.value,
-    rotate,
+    rotate: turned.rotate,
   }
 }
 
