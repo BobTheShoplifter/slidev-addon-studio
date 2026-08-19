@@ -305,6 +305,14 @@ describe('locate', () => {
     expect(resolveRange(SLIDE, [0, 1], { kind: 'heading', text: 'a different heading entirely' })).toBeNull()
   })
 
+  it('confirms a nested tag inside the lines it was hinted at', () => {
+    const source = 'Some text with <code>a snippet</code> in it'
+    const nested = { kind: 'html' as const, tag: 'code', nested: true }
+    expect(resolveRange(source, [0, 1], nested)).toEqual([0, 1])
+    // The wrong lines are still refused.
+    expect(resolveRange(`${source}\n\nplain`, [2, 3], nested)).toBeNull()
+  })
+
   it('refuses a nested tag rather than matching one of its siblings', () => {
     // The sweep can only find blocks that begin a line, so for a tag inside a
     // wrapper the only honest answers are the hint or nothing.

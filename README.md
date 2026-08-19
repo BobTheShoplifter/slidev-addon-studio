@@ -349,6 +349,9 @@ worth being dull about.
   Wrap the block in a `<div>` to style it as a whole.
 - Two blocks that are byte for byte identical cannot be told apart if the line
   hint is ever wrong. Studio says so and refuses rather than picking one.
+- Content a component renders from *other* slides, such as `<Toc>`, carries
+  those slides' own annotations. Clicking an entry there selects nothing:
+  its lines belong to a different slide, and following them would edit it.
 - A usage example that abbreviates, such as `:items="[{ … }, …]"`, is still
   inserted as the snippet but cannot be previewed, since it is not valid
   JavaScript. Add `preview:` to the `@studio` block to give the palette

@@ -89,6 +89,20 @@ function blockEnd(lines: string[], start: number) {
   return i
 }
 
+/** Whether the hinted lines really contain this element, wherever it sits. */
+function containsTag(block: string, signature: Signature): boolean {
+  const name = (signature.tag ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  if (!name)
+    return false
+
+  const pattern = new RegExp(`<${name}(?:"[^"]*"|'[^']*'|[^>"'])*`, 'gi')
+  for (const match of block.matchAll(pattern)) {
+    if (!signature.sig || tagSignature(match[0]) === signature.sig)
+      return true
+  }
+  return false
+}
+
 function blockText(lines: string[], start: number) {
   return lines.slice(start, blockEnd(lines, start)).join('\n')
 }
@@ -98,6 +112,12 @@ function matches(block: string, signature: Signature) {
     return false
 
   if (signature.tag) {
+    // A nested tag does not start its block: `<p>text <code>x</code></p>` puts
+    // it mid-line. Confirming the hint means finding the tag inside those
+    // lines, which is still a check, not a guess.
+    if (signature.nested)
+      return containsTag(block, signature)
+
     const opening = block.trim().match(/^<[A-Za-z][\w.-]*(?:"[^"]*"|'[^']*'|[^>"'])*/)?.[0]
     if (!opening)
       return false
