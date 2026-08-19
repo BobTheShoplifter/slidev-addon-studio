@@ -691,7 +691,9 @@
   position: fixed;
   width: 9px;
   height: 9px;
-  margin: -5px 0 0 -5px;
+  /* Centred on the point it marks: with a 9px box that is half a pixel, and
+     -5px left the grab area sitting up and to the left of the corner. */
+  margin: -4.5px 0 0 -4.5px;
   background: #fff;
   border: 1px solid var(--studio-accent);
   border-radius: 2px;

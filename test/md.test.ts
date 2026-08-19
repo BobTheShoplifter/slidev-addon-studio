@@ -5,6 +5,7 @@ import { formatPos, parsePos, readDrag, removeDrag, writeDrag } from '../client/
 import { toggleBullet, toggleHeading, toggleQuote, toggleWrap, toLink } from '../client/md/format'
 import { formatValue, patchFrontmatterRaw } from '../client/md/frontmatter'
 import { readMotion, writeMotion } from '../client/md/motion'
+import { resize } from '../client/composables/useTransformGizmo'
 import type { ObjectRow } from '../client/md/literals'
 import { formatObjectArray, formatStringArray, isArrayType, isColorValue, parseObjectArray, parseStringArray } from '../client/md/literals'
 import { getBlock, insertAfter, moveBlock, removeBlock, replaceBlock, unwrap } from '../client/md/lines'
@@ -593,5 +594,35 @@ describe('motion', () => {
   it('removes every attribute it added', () => {
     const next = writeMotion(BLOCK, [0, 1], 'zoom', 100)
     expect(writeMotion(next, [0, 1], null)).toBe(BLOCK)
+  })
+})
+
+describe('resize', () => {
+  const box = { x: 100, y: 100, w: 200, h: 100 }
+
+  it('keeps the opposite edge anchored', () => {
+    expect(resize(box, 'e', 50, 0, false)).toMatchObject({ x: 100, w: 250 })
+    expect(resize(box, 'w', 50, 0, false)).toMatchObject({ x: 150, w: 150 })
+    expect(resize(box, 's', 0, 40, false)).toMatchObject({ y: 100, h: 140 })
+    expect(resize(box, 'n', 0, 40, false)).toMatchObject({ y: 140, h: 60 })
+  })
+
+  it('anchors even when the size hits its minimum', () => {
+    // Dragging the west handle far past the right edge used to slide the
+    // element sideways instead of stopping at the minimum width.
+    const next = resize(box, 'w', 400, 0, false)
+    expect(next.w).toBe(16)
+    expect(next.x + next.w).toBe(300)
+
+    const up = resize(box, 'n', 0, 400, false)
+    expect(up.h).toBe(16)
+    expect(up.y + up.h).toBe(200)
+  })
+
+  it('anchors when the aspect ratio is kept', () => {
+    const next = resize(box, 'nw', -100, 0, true)
+    expect(next.x + next.w).toBe(300)
+    expect(next.y + next.h).toBe(200)
+    expect(next.w / next.h).toBeCloseTo(2)
   })
 })

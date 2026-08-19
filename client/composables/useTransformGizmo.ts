@@ -338,31 +338,48 @@ export function useTransformGizmo(context: {
   }
 }
 
-function resize(box: Box, handle: ResizeHandle, dx: number, dy: number, keepRatio: boolean): Box {
-  const next = { ...box }
+/** Smallest an element may be dragged to, in canvas units. */
+const MIN_SIZE = 16
 
+/**
+ * Resizes a box by one of its handles.
+ *
+ * The edge opposite the handle is an anchor: it must not move, whatever happens
+ * to the size. Setting the position from the raw pointer delta and clamping the
+ * size afterwards broke that, so dragging a west or north handle past the
+ * minimum, or holding Shift to keep the ratio, slid the element sideways
+ * instead of resizing it in place.
+ */
+export function resize(box: Box, handle: ResizeHandle, dx: number, dy: number, keepRatio: boolean): Box {
+  const right = box.x + box.w
+  const bottom = box.y + box.h
+
+  let w = box.w
+  let h = box.h
   if (handle.includes('e'))
-    next.w = box.w + dx
-  if (handle.includes('w')) {
-    next.x = box.x + dx
-    next.w = box.w - dx
-  }
+    w = box.w + dx
+  if (handle.includes('w'))
+    w = box.w - dx
   if (handle.includes('s'))
-    next.h = box.h + dy
-  if (handle.includes('n')) {
-    next.y = box.y + dy
-    next.h = box.h - dy
-  }
+    h = box.h + dy
+  if (handle.includes('n'))
+    h = box.h - dy
 
   if (keepRatio && box.w > 0 && box.h > 0) {
     const ratio = box.w / box.h
     if (handle === 'n' || handle === 's')
-      next.w = next.h * ratio
+      w = h * ratio
     else
-      next.h = next.w / ratio
+      h = w / ratio
   }
 
-  next.w = Math.max(16, next.w)
-  next.h = Math.max(16, next.h)
-  return next
+  w = Math.max(MIN_SIZE, w)
+  h = Math.max(MIN_SIZE, h)
+
+  return {
+    x: handle.includes('w') ? right - w : box.x,
+    y: handle.includes('n') ? bottom - h : box.y,
+    w,
+    h,
+  }
 }
