@@ -171,7 +171,14 @@ export function useTransformGizmo(context: {
       edges = { left: true, right: true, top: true, bottom: true }
     }
     else {
-      box = resize(startBox, gesture.handle, dx, dy, event.shiftKey)
+      // The pointer moves on screen, the box lives in the element's own frame.
+      // On a rotated element those are different directions, so dragging the
+      // east handle of a tilted block stretched it sideways on screen rather
+      // than along its own edge.
+      const angle = (-startRotate * Math.PI) / 180
+      const localX = dx * Math.cos(angle) - dy * Math.sin(angle)
+      const localY = dx * Math.sin(angle) + dy * Math.cos(angle)
+      box = resize(startBox, gesture.handle, localX, localY, event.shiftKey)
       edges = {
         left: gesture.handle.includes('w'),
         right: gesture.handle.includes('e'),
@@ -338,6 +345,18 @@ export function useTransformGizmo(context: {
   }
 
   function paint(box: Box, rotate: number) {
+    // A rebuild can land in the middle of a gesture, from an autosave or from
+    // the author editing the file in their editor. The painted node is then
+    // detached and the element stops following the pointer, so it is picked up
+    // again from the live selection.
+    if (painted && !document.contains(painted)) {
+      const current = context.getTarget()
+      const live = current && (wrapped ? positionedWrapper(current.el) ?? current.el : current.el)
+      painted = live && document.contains(live) ? live : null
+      if (painted)
+        restore = painted.getAttribute('style') ?? ''
+    }
+
     if (!painted)
       return
     painted.style.left = `${box.x}px`

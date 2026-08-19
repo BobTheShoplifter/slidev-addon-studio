@@ -27,6 +27,18 @@ import { editing, hovered, missed, selection, studioOpen } from '../state'
  * double click on a selected block landed on the overlay covering it, so
  * editing text could not be started at all once something was selected.
  */
+/**
+ * Whether an element is actually on screen.
+ *
+ * A block waiting for its click step still occupies its space, so the geometric
+ * fallback happily handed back something invisible: clicking the blank gap where
+ * it will appear put handles around nothing.
+ */
+function isVisible(el: Element): boolean {
+  const style = getComputedStyle(el)
+  return style.visibility !== 'hidden' && Number.parseFloat(style.opacity) > 0.01
+}
+
 function isStudioChrome(target: EventTarget | null): target is Element {
   return target instanceof Element && !!target.closest('.slidev-studio')
 }
@@ -69,7 +81,7 @@ export function useSelection(
    */
   function targetFromPoint(x: number, y: number): StudioTarget | null {
     const candidates = mappedElements(no())
-      .filter(el => getComputedStyle(el).pointerEvents === 'none')
+      .filter(el => getComputedStyle(el).pointerEvents === 'none' && isVisible(el))
       .map(el => ({ el, box: el.getBoundingClientRect() }))
       .filter(({ box }) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom)
       .sort((a, b) => a.box.width * a.box.height - b.box.width * b.box.height)

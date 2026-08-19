@@ -687,8 +687,27 @@
   border-color: rgba(79, 140, 255, 0.55);
 }
 
-.studio-handle {
+/* The selection's frame, turned to match the block it belongs to. */
+.studio-frame {
   position: fixed;
+  transform-origin: center center;
+  pointer-events: none;
+}
+
+.studio-outline--frame {
+  position: absolute;
+  inset: 0;
+}
+
+.studio-move {
+  position: absolute;
+  inset: 0;
+  cursor: move;
+  pointer-events: auto;
+}
+
+.studio-handle {
+  position: absolute;
   width: 9px;
   height: 9px;
   /* Centred on the point it marks: with a 9px box that is half a pixel, and

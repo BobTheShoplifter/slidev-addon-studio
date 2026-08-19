@@ -16,8 +16,7 @@ Press <kbd>E</kbd> to open the editor, then click anything on this slide.
 
 # Click to select
 
-Every block here maps back to a line in `playground/slides.md`.
-Select one and the Element panel shows the exact Markdown behind it.
+ EDITED
 
 - Headings, paragraphs, lists and quotes
 - Plain HTML elements
@@ -87,14 +86,3 @@ layout: center
 
 Close the editor, open `playground/slides.md`, and every change you made is
 there as an ordinary diff.
-
----
-
-# Probe heading
-
-Paragraph one of the probe.
-
-- alpha
-- beta
-
-<Badge label="probe" />

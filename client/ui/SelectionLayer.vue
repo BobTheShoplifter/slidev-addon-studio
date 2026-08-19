@@ -15,19 +15,52 @@ import { editing, hovered, outlineEnabled, selection } from '../state'
  */
 const studio = useStudio()
 
-interface Rect { left: number, top: number, width: number, height: number }
+interface Rect { left: number, top: number, width: number, height: number, rotate: number }
+
+/**
+ * How far the element is turned, read from whatever put it there: Slidev's
+ * `v-drag`, the theme, or the author's own CSS.
+ */
+function rotationOf(el: Element): number {
+  const transform = getComputedStyle(el).transform
+  if (!transform || transform === 'none')
+    return 0
+  const matrix = new DOMMatrixReadOnly(transform)
+  return Math.round(Math.atan2(matrix.b, matrix.a) * 180 / Math.PI)
+}
 
 const selectionRect = ref<Rect | null>(null)
 const hoverRect = ref<Rect | null>(null)
 const outlineRects = ref<Rect[]>([])
 
+/**
+ * The element's own box on screen, and its rotation.
+ *
+ * Not `getBoundingClientRect` alone: for a rotated element that is the upright
+ * box *containing* it, so the outline and the handles were drawn around empty
+ * corners rather than around the element. The canvas measures the untilted box,
+ * and the frame is then turned to match.
+ */
 function rectOf(el: Element | null | undefined): Rect | null {
   if (!el?.isConnected)
     return null
-  const box = el.getBoundingClientRect()
-  if (!box.width && !box.height)
+  const bounds = el.getBoundingClientRect()
+  if (!bounds.width && !bounds.height)
     return null
-  return { left: box.left, top: box.top, width: box.width, height: box.height }
+
+  const rotate = rotationOf(el)
+  if (!rotate)
+    return { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height, rotate: 0 }
+
+  const { rect, scale } = studio.canvas
+  const box = studio.canvas.boxOf(el)
+  return {
+    left: rect.value.left + box.x * scale.value,
+    top: rect.value.top + box.y * scale.value,
+    width: box.w * scale.value,
+    height: box.h * scale.value,
+    rotate,
+  }
 }
 
 useRafFn(() => {
@@ -75,6 +108,16 @@ function style(rect: Rect) {
   }
 }
 
+function frameStyle(rect: Rect) {
+  return {
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
+    transform: rect.rotate ? `rotate(${rect.rotate}deg)` : undefined,
+  }
+}
+
 function handleStyle(rect: Rect, handle: typeof handles[number]) {
   return {
     left: `${rect.left + rect.width * handle.x}px`,
@@ -96,8 +139,7 @@ function handleStyle(rect: Rect, handle: typeof handles[number]) {
     <div v-if="hoverRect" class="studio-outline studio-outline--hover" :style="style(hoverRect)" />
 
     <template v-if="selectionRect && selection && !editing">
-      <div class="studio-outline" :style="style(selectionRect)" />
-
+      <!-- The label stays upright, so it is readable however the block is turned. -->
       <div
         class="studio-badge"
         :style="{ left: `${selectionRect.left}px`, top: `${selectionRect.top - 4}px` }"
@@ -106,30 +148,38 @@ function handleStyle(rect: Rect, handle: typeof handles[number]) {
       </div>
 
       <!--
-        The body of the selection is the move handle. It is named so a double
-        click landing on it can be understood as a double click on the block it
-        covers, which is what the user aimed at.
+        One frame for the outline, the move surface and the handles, so a
+        rotated block gets a frame that is turned with it rather than the
+        upright box that happens to contain it.
       -->
-      <div
-        class="studio-move"
-        :style="{ ...style(selectionRect), position: 'fixed', cursor: 'move', pointerEvents: 'auto' }"
-        @pointerdown="studio.gizmo.startMove($event)"
-      />
+      <div class="studio-frame" :style="frameStyle(selectionRect)">
+        <div class="studio-outline studio-outline--frame" />
 
-      <div
-        v-for="handle in handles"
-        :key="handle.id"
-        class="studio-handle"
-        :style="handleStyle(selectionRect, handle)"
-        @pointerdown="studio.gizmo.startResize($event, handle.id)"
-      />
+        <!--
+          The body of the selection is the move handle. It is named so a double
+          click landing on it can be understood as a double click on the block
+          it covers, which is what the user aimed at.
+        -->
+        <div
+          class="studio-move"
+          @pointerdown="studio.gizmo.startMove($event)"
+        />
 
-      <div
-        class="studio-handle studio-handle--rotate"
-        :style="{ left: `${selectionRect.left + selectionRect.width / 2}px`, top: `${selectionRect.top - 22}px` }"
-        title="Rotate. Hold Shift for 15° steps"
-        @pointerdown="studio.gizmo.startRotate($event)"
-      />
+        <div
+          v-for="handle in handles"
+          :key="handle.id"
+          class="studio-handle"
+          :style="{ left: `${handle.x * 100}%`, top: `${handle.y * 100}%`, cursor: handle.cursor }"
+          @pointerdown="studio.gizmo.startResize($event, handle.id)"
+        />
+
+        <div
+          class="studio-handle studio-handle--rotate"
+          style="left: 50%; top: -22px"
+          title="Rotate. Hold Shift for 15° steps"
+          @pointerdown="studio.gizmo.startRotate($event)"
+        />
+      </div>
     </template>
 
     <div
