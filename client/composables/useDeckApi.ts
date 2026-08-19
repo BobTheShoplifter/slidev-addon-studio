@@ -52,14 +52,6 @@ export const deckApi = {
   move: (no: number, to: number) => post<DeckResult>('deck', { action: 'move', no, to }),
 }
 
-/**
- * Rebuilds the slide modules. Needed after a change Slidev bakes in at compile
- * time, above all the slide's layout.
- */
-export function requestReload() {
-  return post<{ ok: true }>('reload', {})
-}
-
 export const assetApi = {
   list: () => request<{ assets: StudioAsset[], root: string }>('assets'),
   upload: (name: string, data: string, dir?: string) => post<StudioAsset>('assets', { name, data, dir }),

@@ -3,6 +3,7 @@ import { clearClicks, findWrapper, readClicks, writeClicks } from '../client/md/
 import { readClasses, writeClasses } from '../client/md/classes'
 import { formatPos, parsePos, readDrag, removeDrag, writeDrag } from '../client/md/drag'
 import { toggleBullet, toggleHeading, toggleQuote, toggleWrap, toLink } from '../client/md/format'
+import { formatValue, patchFrontmatterRaw } from '../client/md/frontmatter'
 import { formatStringArray, isArrayType, isColorValue, parseStringArray } from '../client/md/literals'
 import { getBlock, insertAfter, moveBlock, removeBlock, replaceBlock, unwrap } from '../client/md/lines'
 import { resolveRange } from '../client/md/locate'
@@ -328,5 +329,56 @@ describe('inline formatting', () => {
   it('toggles a quote the same way', () => {
     expect(toggleQuote(at('one\ntwo', 0, 7)).text).toBe('> one\n> two')
     expect(toggleQuote(at('> one\n> two', 0, 11)).text).toBe('one\ntwo')
+  })
+})
+
+describe('frontmatter', () => {
+  const RAW = [
+    'layout: split',
+    '# which side the mascot sits on',
+    'side: right',
+    'mascot: shield-1',
+    'stroke: true',
+  ].join('\n')
+
+  it('replaces a value and leaves everything else exactly as written', () => {
+    const { raw, unhandled } = patchFrontmatterRaw(RAW, { layout: 'cover' })
+    expect(raw).toBe([
+      'layout: cover',
+      '# which side the mascot sits on',
+      'side: right',
+      'mascot: shield-1',
+      'stroke: true',
+    ].join('\n'))
+    expect(unhandled).toEqual([])
+  })
+
+  it('adds a key that was not there and removes one set to null', () => {
+    expect(patchFrontmatterRaw(RAW, { zoom: 0.8 }).raw).toContain('zoom: 0.8')
+    expect(patchFrontmatterRaw(RAW, { stroke: null }).raw).not.toContain('stroke')
+  })
+
+  it('quotes only what YAML would otherwise misread', () => {
+    expect(formatValue('cover')).toBe('cover')
+    expect(formatValue(0.8)).toBe('0.8')
+    expect(formatValue(true)).toBe('true')
+    expect(formatValue('94%')).toBe('94%')
+    expect(formatValue('yes')).toBe('"yes"')
+    expect(formatValue('12')).toBe('"12"')
+    expect(formatValue('a: b')).toBe('"a: b"')
+    expect(formatValue('- leading dash')).toBe('"- leading dash"')
+    expect(formatValue('')).toBe('""')
+    expect(formatValue('say "hi"')).toBe('"say \\"hi\\""')
+  })
+
+  it('refuses to rewrite a value that spans lines', () => {
+    const nested = ['layout: cover', 'drawings:', '  persist: false'].join('\n')
+    const { raw, unhandled } = patchFrontmatterRaw(nested, { drawings: 'x' })
+    expect(unhandled).toEqual(['drawings'])
+    expect(raw).toBe(nested)
+  })
+
+  it('starts a frontmatter block from nothing', () => {
+    expect(patchFrontmatterRaw('', { layout: 'center' }).raw).toBe('layout: center')
   })
 })

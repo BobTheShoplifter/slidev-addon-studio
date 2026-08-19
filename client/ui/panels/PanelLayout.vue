@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { requestReload } from '../../composables/useDeckApi'
 import { useCatalog } from '../../composables/useCatalog'
 import { useStudio } from '../../context'
 import LayoutPreview from '../parts/LayoutPreview.vue'
@@ -57,11 +56,8 @@ function coerce(type: string | undefined, value: string | boolean | null) {
 const note = ref('')
 watch(() => studio.note(), value => (note.value = value), { immediate: true })
 
-async function set(key: string, value: unknown) {
-  await studio.setFrontmatter({ [key]: value === '' ? null : value }, `Set ${key}`)
-  // The layout is compiled into the slide, so switching it needs a rebuild.
-  if (key === 'layout')
-    await requestReload()
+function set(key: string, value: unknown) {
+  return studio.setFrontmatter({ [key]: value === '' ? null : value }, `Set ${key}`)
 }
 </script>
 

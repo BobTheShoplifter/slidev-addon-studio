@@ -2,6 +2,7 @@ import type { SlidePatch } from '@slidev/types'
 import type { MaybeRefOrGetter } from 'vue'
 import { useDynamicSlideInfo } from '@slidev/client/composables/useSlideInfo.ts'
 import { computed, ref, toValue } from 'vue'
+import { patchFrontmatterRaw } from '../md/frontmatter'
 import { busy, reportError } from '../state'
 
 /**
@@ -16,6 +17,7 @@ import { busy, reportError } from '../state'
 type HistoryEntry =
   | { kind: 'content', label: string, no: number, before: string, after: string }
   | { kind: 'frontmatter', label: string, no: number, before: Record<string, any>, after: Record<string, any> }
+  | { kind: 'frontmatterRaw', label: string, no: number, before: string, after: string }
 
 const undoStack = ref<HistoryEntry[]>([])
 const redoStack = ref<HistoryEntry[]>([])
@@ -68,13 +70,36 @@ export function useSlideSource(no: MaybeRefOrGetter<number>) {
     await send(slideNo.value, { content: next, skipHmr: options.skipHmr })
   }
 
-  /** Frontmatter is patched key by key; `null` removes a key. */
+  /**
+   * Frontmatter is sent as raw text rather than as a patch.
+   *
+   * A patch updates Slidev's own resolved copy of the deck, so the file watcher
+   * then finds nothing changed and never rebuilds the slide. Since the layout
+   * is compiled into the slide, switching it that way appeared to do nothing
+   * until the server restarted. Sending the raw block is what Slidev's own
+   * editor does, and it rebuilds properly.
+   *
+   * The raw text is edited line by line, so comments and key order survive.
+   * Anything a line edit cannot safely rewrite falls back to the patch.
+   */
   async function setFrontmatter(values: Record<string, any>, label: string) {
-    const before: Record<string, any> = {}
-    for (const key of Object.keys(values))
-      before[key] = frontmatter.value[key] ?? null
-    push({ kind: 'frontmatter', label, no: slideNo.value, before, after: values })
-    await send(slideNo.value, { frontmatter: values })
+    const currentRaw = info.value?.frontmatterRaw ?? ''
+    const { raw, unhandled } = patchFrontmatterRaw(currentRaw, values)
+
+    const handled = Object.fromEntries(Object.entries(values).filter(([key]) => !unhandled.includes(key)))
+    if (Object.keys(handled).length) {
+      push({ kind: 'frontmatterRaw', label, no: slideNo.value, before: currentRaw, after: raw })
+      await send(slideNo.value, { frontmatterRaw: raw })
+    }
+
+    if (unhandled.length) {
+      const rest = Object.fromEntries(unhandled.map(key => [key, values[key]]))
+      const before: Record<string, any> = {}
+      for (const key of unhandled)
+        before[key] = frontmatter.value[key] ?? null
+      push({ kind: 'frontmatter', label, no: slideNo.value, before, after: rest })
+      await send(slideNo.value, { frontmatter: rest })
+    }
   }
 
   async function setNote(next: string) {
@@ -93,6 +118,8 @@ export function useStudioHistory() {
   async function replay(entry: HistoryEntry, direction: 'before' | 'after') {
     if (entry.kind === 'content')
       await send(entry.no, { content: entry[direction] })
+    else if (entry.kind === 'frontmatterRaw')
+      await send(entry.no, { frontmatterRaw: entry[direction] })
     else
       await send(entry.no, { frontmatter: entry[direction] })
   }

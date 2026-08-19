@@ -254,6 +254,7 @@ already there:
 | Toolbar button | `custom-nav-controls.vue` |
 | Keyboard shortcuts | `setup/shortcuts.ts` |
 | Writing to the `.md` | `useDynamicSlideInfo().update()`, the same endpoint Slidev's own editor and `v-drag` use |
+| Changing frontmatter | The same endpoint, but as `frontmatterRaw` rather than a `frontmatter` patch, edited line by line so comments and key order survive. A patch updates Slidev's own resolved copy of the deck, so the file watcher then finds nothing changed and never rebuilds the slide, and a layout switch appears to do nothing until the server restarts |
 | Free positioning | Slidev's `v-drag`, so positions stay compatible with Slidev's own handles |
 | Component and layout catalog | `setup/vite-plugins.ts`, which receives the fully resolved options including every theme and addon root |
 | Adding and reordering slides | A small dev-only API in the addon's own Vite plugin, since Slidev's endpoint only patches slides in place |
