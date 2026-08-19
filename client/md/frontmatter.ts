@@ -28,7 +28,10 @@ const RE_KEY = /^(\s*)([\w$-]+)\s*:/
  * structures a line edit cannot safely rewrite.
  */
 export function patchFrontmatterRaw(raw: string, values: Record<string, unknown>): FrontmatterEdit {
-  const lines = raw ? raw.split(/\r?\n/) : []
+  // The block Slidev hands back ends with a newline, so splitting it leaves an
+  // empty last line. Appending after that grew a blank line between every key
+  // the editor added.
+  const lines = raw ? raw.replace(/\n+$/, '').split(/\r?\n/) : []
   const unhandled: string[] = []
 
   for (const [key, value] of Object.entries(values)) {

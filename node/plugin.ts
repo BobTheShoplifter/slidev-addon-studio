@@ -84,6 +84,16 @@ export function studioPlugin(options: ResolvedSlidevOptions): Plugin {
           const result = await handle(route, req.method ?? 'GET', req, options)
           if (result === undefined)
             return next()
+
+          // Adding, duplicating, removing or moving a slide renumbers the deck,
+          // and Slidev's own reload only refreshes the slides it already knows:
+          // a slide added past the end came back rendering whatever used to
+          // carry that number. Rebuilding the page is the honest answer to a
+          // change in the deck's shape, and it is a deliberate, occasional act.
+          if (route === 'deck' && req.method === 'POST') {
+            setTimeout(() => server.hot.send({ type: 'full-reload' }), 150)
+          }
+
           res.statusCode = 200
           res.setHeader('Content-Type', 'application/json')
           res.end(JSON.stringify(result))

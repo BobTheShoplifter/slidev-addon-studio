@@ -80,6 +80,21 @@ function coerce(type: string | undefined, value: string | boolean | null) {
 const note = ref('')
 watch(() => studio.note(), value => (note.value = value), { immediate: true })
 
+/**
+ * Skipping a slide is a one way door from in here.
+ *
+ * Slidev drops hidden slides from the deck, so the slide loses its number the
+ * moment this is written: the editor cannot show it, the Slides panel cannot
+ * list it, and the control could not be set back. Studio moves to the
+ * neighbouring slide rather than sitting on one that no longer exists.
+ */
+async function hide(skip: boolean) {
+  const previous = Math.max(1, studio.no() - 1)
+  await set('hide', skip ? true : null)
+  if (skip)
+    studio.go(previous)
+}
+
 function set(key: string, value: unknown) {
   return studio.setFrontmatter({ [key]: value === '' ? null : value }, `Set ${key}`)
 }
@@ -159,7 +174,7 @@ function numberOrNull(value: string) {
       >
     </StudioField>
     <StudioField label="Hide">
-      <select :value="frontmatter.hide ? 'yes' : 'no'" @change="set('hide', ($event.target as HTMLSelectElement).value === 'yes' ? true : null)">
+      <select :value="frontmatter.hide ? 'yes' : 'no'" @change="hide(($event.target as HTMLSelectElement).value === 'yes')">
         <option value="no">
           Show in the deck
         </option>
@@ -168,6 +183,10 @@ function numberOrNull(value: string) {
         </option>
       </select>
     </StudioField>
+    <p class="studio-hint">
+      A skipped slide leaves the deck entirely, so the editor cannot reach it
+      again: delete <code>hide: true</code> in the Markdown to bring it back.
+    </p>
   </section>
 
   <section class="studio-section">

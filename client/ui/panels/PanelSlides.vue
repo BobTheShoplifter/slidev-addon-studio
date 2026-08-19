@@ -4,6 +4,8 @@ import { useLocalStorage } from '@vueuse/core'
 import { computed, ref } from 'vue'
 import { deckApi } from '../../composables/useDeckApi'
 import { onDomEvent } from '../../composables/useDomEvent'
+import { useStudioHistory } from '../../composables/useSlideSource'
+import { clearSelection } from '../../state'
 import { useStudio } from '../../context'
 import SlideThumbnail from '../parts/SlideThumbnail.vue'
 import StudioIcon from '../parts/StudioIcon.vue'
@@ -17,6 +19,7 @@ import StudioIcon from '../parts/StudioIcon.vue'
  */
 const studio = useStudio()
 const nav = useNav()
+const history = useStudioHistory()
 
 const slides = computed(() => nav.slides.value)
 const showThumbnails = useLocalStorage('slidev-studio:slide-thumbnails', true)
@@ -34,8 +37,25 @@ async function run(action: Promise<{ no: number } | null>) {
   busy.value = true
   try {
     const result = await action
-    if (result)
-      nav.go(result.no)
+    if (!result)
+      return
+
+    // Undo replays a whole slide by its number, and adding, duplicating,
+    // removing or moving a slide renumbers everything after it: replaying an
+    // older entry would then write that slide's text over a different slide.
+    // The history is dropped rather than left pointing at the wrong slides.
+    history.reset()
+    clearSelection()
+
+    // A change to the deck's shape rebuilds the page, because Slidev's own
+    // reload only refreshes slides it already knows and a new one came back
+    // showing whatever used to carry that number. The address is put on the
+    // new slide first, so the editor comes back where the action pointed:
+    // `go` alone would clamp, since this browser still thinks the deck is
+    // one slide shorter.
+    const path = window.location.pathname.replace(/\/\d+$/, `/${result.no}`)
+    window.history.replaceState(null, '', path + window.location.search)
+    nav.go(Math.min(result.no, nav.total.value))
   }
   finally {
     busy.value = false

@@ -626,3 +626,15 @@ describe('resize', () => {
     expect(next.w / next.h).toBeCloseTo(2)
   })
 })
+
+describe('frontmatter formatting', () => {
+  it('does not grow a blank line between keys', () => {
+    // Slidev hands the block back with a trailing newline.
+    let raw = 'layout: cover\n'
+    for (const [key, value] of [['title', 'Hei'], ['class', 'text-red'], ['zoom', 0.8]] as const)
+      raw = patchFrontmatterRaw(raw, { [key]: value }).raw
+
+    expect(raw).toBe('layout: cover\ntitle: Hei\nclass: text-red\nzoom: 0.8')
+    expect(raw).not.toContain('\n\n')
+  })
+})
