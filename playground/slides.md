@@ -49,8 +49,6 @@ knows what it wants.
 ]" />
 
 ---
-layout: center
----
 
 # Drag anything
 

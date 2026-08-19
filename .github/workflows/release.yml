@@ -6,22 +6,27 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: read
+  # npm's trusted publishing: the registry checks a short lived token from
+  # GitHub that names this repository and this workflow, so there is no npm
+  # token to store, leak or rotate. Provenance is attached automatically, which
+  # is what lets anyone verify the tarball was built from this source.
+  id-token: write
+
 jobs:
   publish:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      # Lets npm record where the package was built, so anyone can check the
-      # published tarball against this repository.
-      id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: pnpm
           registry-url: https://registry.npmjs.org
+          # No cache in a release build: what is published should come from a
+          # clean install of exactly what the lockfile says.
+          package-manager-cache: false
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
@@ -38,6 +43,17 @@ jobs:
             exit 1
           }
 
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Trusted publishing needs npm 11.5.1 or newer. The runner usually has it
+      # already, so this only reaches for the registry when it does not.
+      - name: Ensure npm can use trusted publishing
+        run: |
+          need=11.5.1
+          have="$(npm --version)"
+          if [ "$(printf '%s\n%s\n' "$need" "$have" | sort -V | head -1)" != "$need" ]; then
+            echo "npm $have is older than $need, upgrading"
+            npm install -g "npm@>=$need"
+          fi
+          npm --version
+
+      # No NODE_AUTH_TOKEN: the OIDC exchange above is the authentication.
+      - run: npm publish
