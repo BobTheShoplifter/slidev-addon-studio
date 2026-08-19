@@ -87,3 +87,14 @@ layout: center
 
 Close the editor, open `playground/slides.md`, and every change you made is
 there as an ordinary diff.
+
+---
+
+# Probe heading
+
+Paragraph one of the probe.
+
+- alpha
+- beta
+
+<Badge label="probe" />

@@ -1,7 +1,7 @@
 import type { SourceRange, StudioTarget, TargetKind } from '../types'
 import { nextTick, onScopeDispose, watch, watchEffect } from 'vue'
 import { removeBlock } from '../md/lines'
-import { belongsToSlide, mappedElements, slideElement } from '../dom'
+import { belongsToSlide, canvasElement, mappedElements, slideElement } from '../dom'
 import { onDomEvent } from './useDomEvent'
 import { normalise, resolveRange } from '../md/locate'
 import { readDrag } from '../md/drag'
@@ -181,36 +181,51 @@ export function useSelection(
   async function reselect(hint: SourceRange | null, kind: TargetKind, tag?: string) {
     await nextTick()
 
-    // A re-render can land a frame or several later, and binding to whatever is
-    // there at a fixed delay bound the selection to the element that was about
-    // to be thrown away: the outline vanished and the next press went to the
-    // slide instead of to the overlay, so every other drag did nothing. Waiting
-    // for an element that is actually on screen is the whole fix.
-    const deadline = Date.now() + 1200
-    let best: HTMLElement | undefined
+    // A re-render can land a frame or several later, and binding at a fixed
+    // delay bound the selection to the element that was about to be thrown
+    // away: the outline vanished and the next press went to the slide instead
+    // of to the overlay, so every other drag did nothing. Waiting for an
+    // element that is actually in the document, and rebinding again if that one
+    // is replaced too, is what keeps a selection alive across an edit.
+    const deadline = Date.now() + 1500
+    let bound: StudioTarget | null = null
+    let fallback: StudioTarget | null = null
 
     while (Date.now() < deadline) {
       if (!hint || !slideElement(no()))
         return
 
-      const candidates = mappedElements(no())
+      const best = mappedElements(no())
         .filter(el => (el.dataset.studioKind ?? 'unknown') === kind && el.dataset.studioTag === tag)
-        .filter(el => document.contains(el) && el.getBoundingClientRect().width > 0)
-
-      best = candidates
+        // Attached is the test, not visible: an element that has just been
+        // given `v-click` is hidden at the current step, and refusing to
+        // rebind to it leaves the selection on a node that no longer exists.
+        .filter(el => document.contains(el))
         .map(el => ({ el, start: parseHint(el.dataset.studioSrc)?.[0] ?? Number.POSITIVE_INFINITY }))
         .sort((a, b) => Math.abs(a.start - hint[0]) - Math.abs(b.start - hint[0]))[0]?.el
 
-      if (best)
+      const candidate = best ? describe(best, no(), content()) : null
+      fallback = candidate ?? fallback
+
+      // The source is updated the moment the write returns, while the rebuilt
+      // DOM lands a few frames later. Binding in between describes the old
+      // element against the new Markdown, which cannot be traced, so the
+      // selection came back with no range and nothing could be edited or
+      // deleted afterwards. Waiting for the two to agree is the fix.
+      if (candidate?.range) {
+        bound = candidate
         break
+      }
+
       await new Promise(resolve => setTimeout(resolve, 40))
     }
 
-    // Keep what the user had if the element cannot be found at all. An edit
-    // that briefly cannot be rebound used to empty the whole panel, which read
-    // as the editor losing the thing you were working on.
-    if (best)
-      selection.value = describe(best, no(), content())
+    // Keep what the user had if nothing can be traced at all. An edit that
+    // briefly cannot be rebound used to empty the whole panel, which read as
+    // the editor losing the thing you were working on.
+    const next = bound ?? fallback
+    if (next)
+      selection.value = next
   }
 
   /**
@@ -228,7 +243,10 @@ export function useSelection(
     observer?.disconnect()
     observer = null
 
-    const root = studioOpen.value ? slideElement(no()) : null
+    // Watched on the canvas rather than on the slide, because a rebuild
+    // replaces the slide's own root: an observer bound to that root is watching
+    // a detached node from the first edit onwards, which is no observer at all.
+    const root = studioOpen.value ? canvasElement() : null
     if (!root)
       return
 
@@ -236,8 +254,13 @@ export function useSelection(
       const current = selection.value
       if (rebinding || !current || document.contains(current.el))
         return
+
+      // A selection that failed to trace has no range of its own, so the
+      // element's own stamp is the hint. Without it the rebind gave up at once
+      // and the selection stayed on a node that had gone.
+      const hint = current.range ?? parseHint(current.el.dataset.studioSrc)
       rebinding = true
-      reselect(current.range, current.kind, current.tag).finally(() => (rebinding = false))
+      reselect(hint, current.kind, current.tag).finally(() => (rebinding = false))
     })
     observer.observe(root, { childList: true, subtree: true })
   })
