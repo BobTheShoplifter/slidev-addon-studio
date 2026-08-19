@@ -87,7 +87,3 @@ layout: center
 
 Close the editor, open `playground/slides.md`, and every change you made is
 there as an ordinary diff.
-
----
-
-# MARKER-DELTA

@@ -173,14 +173,16 @@ own `components/` directory.
 | Double click | Edit the text of a block in place |
 | Drag | Move the selection. A click on its own never repositions anything |
 | <kbd>Backspace</kbd> or <kbd>Delete</kbd> | Delete the selected element |
-| <kbd>Esc</kbd> | Cancel the drag in progress, or deselect |
+| <kbd>Esc</kbd> | Back out one layer: the drag in progress, then the text editor, then the selection |
 | <kbd>Ctrl</kbd> + <kbd>Z</kbd> | Undo |
 | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd> | Redo |
 | <kbd>Alt</kbd> (held) | Bypass snapping while dragging |
 | <kbd>Shift</kbd> (held) | Keep aspect ratio, or snap rotation to 15 degrees |
 
-Undo history lives in the page, so a reload clears it. Your deck is a file in
-git; that is the real undo.
+Undo history lives in the page, so a reload clears it, and so does anything that
+renumbers the deck: adding, duplicating, deleting, reordering or skipping a
+slide. Undo replays a whole slide by its number, and after a renumbering those
+numbers point somewhere else. Your deck is a file in git; that is the real undo.
 
 ## Teaching Studio about your components
 
@@ -349,6 +351,16 @@ worth being dull about.
   Wrap the block in a `<div>` to style it as a whole.
 - Two blocks that are byte for byte identical cannot be told apart if the line
   hint is ever wrong. Studio says so and refuses rather than picking one.
+- Slidev's own controls sit invisibly over the slide's bottom left corner, so
+  while Studio is open they stop taking the pointer and that corner belongs to
+  the canvas. Studio's toolbar carries undo, redo, the grid, the outlines and
+  closing, and Slidev's own keyboard shortcuts are unaffected.
+- Skipping a slide is a one way door from inside the editor. Slidev drops hidden
+  slides from the deck, so the slide loses its number and nothing can reach it
+  again: delete `hide: true` in the Markdown to bring it back.
+- Adding, duplicating, deleting or reordering a slide reloads the page. Slidev's
+  own reload only refreshes slides it already knows, so a new slide would
+  otherwise come back rendering whatever used to carry its number.
 - Content a component renders from *other* slides, such as `<Toc>`, carries
   those slides' own annotations. Clicking an entry there selects nothing:
   its lines belong to a different slide, and following them would edit it.
