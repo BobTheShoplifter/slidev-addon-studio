@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "A visual editor for Slidev. Select, drag, resize, animate and compose slides on the canvas, with every change written back to your Markdown.",
   "license": "MIT",
+  "packageManager": "pnpm@11.20.0",
   "keywords": [
     "slidev-addon",
     "slidev",
@@ -25,6 +26,7 @@
     "client",
     "node",
     "setup",
+    "shared",
     "styles",
     "types",
     "custom-nav-controls.vue",

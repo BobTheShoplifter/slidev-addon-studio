@@ -652,6 +652,27 @@
   box-shadow: var(--studio-shadow);
 }
 
+/* Floating over the block being edited, rather than covering it. */
+.studio-inline--floating {
+  min-width: 0;
+  width: max-content;
+}
+
+/*
+ * The block itself, while it is being typed into. Deliberately quiet: the whole
+ * point is that the text looks exactly like the slide, so this marks the edge
+ * and nothing else.
+ */
+#slide-content .studio-editing {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+#slide-content .studio-editing:focus {
+  outline-color: var(--studio-accent);
+}
+
 .studio-inline__bar {
   display: flex;
   flex-wrap: wrap;

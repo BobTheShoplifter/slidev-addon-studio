@@ -14,16 +14,9 @@ Press <kbd>E</kbd> to open the editor, then click anything on this slide.
 
 ---
 
-# Click to select
+# Title
 
-Every block here maps back to a line in `playground/slides.md`.
-Select one and the Element panel shows the exact Markdown behind it.
-
-- Headings, paragraphs, lists and quotes
-- Plain HTML elements
-- Vue components
-
-<Badge label="a component" />
+See the [docs](https://sli.dev) and `npm i` for more.
 
 ---
 

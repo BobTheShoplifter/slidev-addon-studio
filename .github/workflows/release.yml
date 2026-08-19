@@ -1,0 +1,43 @@
+name: Release
+
+# Publishing is deliberate: it happens when a version tag is pushed, never on a
+# merge. Cut one with `npm version patch && git push --follow-tags`.
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Lets npm record where the package was built, so anyone can check the
+      # published tarball against this repository.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm typecheck
+
+      # The tag and the version in package.json have to agree, or the tag says
+      # one thing and the registry another.
+      - name: Check the tag matches the version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          test "$tag" = "$version" || {
+            echo "tag $GITHUB_REF_NAME does not match package version $version"
+            exit 1
+          }
+
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,10 +1,12 @@
 # slidev-addon-studio
 
+![slidev-addon-studio: a visual editor for Slidev. A slide canvas with a Shape component selected, showing the selection outline and resize handles](./docs/banner.png)
+
 A visual editor for [Slidev](https://sli.dev). Select, drag, resize, animate and
 compose slides directly on the canvas, the way you would in Keynote or
 PowerPoint, while the deck stays exactly what it was: a Markdown file.
 
-![Studio open on a slide, with a component selected. The Element panel shows its props, its classes and the Markdown line it came from](./docs/studio.png)
+![Studio open on a slide, with a component selected. The Element panel shows its props, its classes and the Markdown line it came from](./docs/framed/studio.png)
 
 **Markdown is the source of truth.** Every action in Studio is a small, readable
 edit to your `.md` file. There is no project format, no database and no lock-in.
@@ -66,7 +68,7 @@ Elements snap to the canvas edges, its centre and thirds, and to the edges and
 centres of everything else on the slide. Hold <kbd>Alt</kbd> to place something
 exactly where you want it instead.
 
-![A block being dragged across the slide, with the selection outline and handles following the pointer](./docs/drag.png)
+![A block being dragged across the slide, with the selection outline and handles following the pointer](./docs/framed/drag.png)
 
 A move of an element that is already free is written straight into its `pos`,
 without rebuilding the slide, so dragging stays as smooth as Slidev's own
@@ -84,7 +86,7 @@ everything else. It is also why the toolbar can be trusted. Round-tripping
 rendered HTML back into Markdown is where visual editors lose components,
 directives and formatting, and a Slidev deck is full of all three.
 
-![A paragraph being edited in place, with a formatting toolbar above it](./docs/inline.png)
+![A paragraph being edited in place, with a formatting toolbar above it](./docs/framed/inline.png)
 
 <kbd>Ctrl</kbd> + <kbd>Enter</kbd> applies, <kbd>Esc</kbd> cancels,
 <kbd>Ctrl</kbd> + <kbd>B</kbd> and <kbd>Ctrl</kbd> + <kbd>I</kbd> do what you
@@ -103,14 +105,14 @@ what fields it wants. A prop that holds a colour offers the deck's own palette,
 read from the custom properties in your theme's stylesheets, so picking one
 keeps the slide pointing at `var(--accent)` rather than freezing a hex.
 
-![The Element panel editing a list of records as rows, with the theme's colour palette open below it](./docs/element-props.png)
+![The Element panel editing a list of records as rows, with the theme's colour palette open below it](./docs/framed/element-props.png)
 
 ### Animating
 
 Slidev's animation model is a sequence of click steps per slide, so the Animate
 panel leads with that sequence and lets you scrub it.
 
-![The Animate panel with a click scrubber and the reveal settings for the selected paragraph](./docs/animate.png)
+![The Animate panel with a click scrubber and the reveal settings for the selected paragraph](./docs/framed/animate.png)
 
 Studio writes whichever form fits the block:
 
@@ -141,7 +143,7 @@ renders the layout at full slide size with this slide's own frontmatter, title
 and lead line, then scales it down, so what you compare is the composition you
 would get.
 
-![The Layout panel showing a thumbnail per layout, each rendering the current slide's title](./docs/layout.png)
+![The Layout panel showing a thumbnail per layout, each rendering the current slide's title](./docs/framed/layout.png)
 
 A layout's props are the frontmatter keys it reads, and they are edited in the
 same panel. On a slide like `layout: fact`, whose entire visible text lives in
@@ -150,7 +152,7 @@ text ever passed through Markdown, so there is nothing on the canvas to click.
 
 ### Working with slides
 
-![The Slides panel showing a live thumbnail per slide, with add, duplicate and delete](./docs/slides.png)
+![The Slides panel showing a live thumbnail per slide, with add, duplicate and delete](./docs/framed/slides.png)
 
 Thumbnails are the real slide components rendered small, not captures, so they
 are never out of date. Drag one to reorder, and add, duplicate or delete from
@@ -158,7 +160,7 @@ the same panel.
 
 ### Inserting
 
-![The Components panel showing the deck's own components, each tile rendering the real component](./docs/components.png)
+![The Components panel showing the deck's own components, each tile rendering the real component](./docs/framed/components.png)
 
 The palette starts with the plain Markdown blocks, because most of what goes on
 a slide is a heading, a paragraph or a list. Below those sit every component the
