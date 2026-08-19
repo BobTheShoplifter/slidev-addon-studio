@@ -64,13 +64,6 @@ jobs:
       # "404 Not Found" from the registry, which is what it says when it will
       # not accept the identity, into something you can act on. The token
       # itself is never printed.
-      - name: Show how this job will authenticate
-        run: |
-          echo "registry: $(npm config get registry)"
-          # Prints the configured value, not a token: with trusted publishing
-          # this has to be empty, or npm will use it instead of asking GitHub.
-          echo "configured auth: '$(npm config get //registry.npmjs.org/:_authToken)'"
-
       - name: Show the identity this job will publish with
         run: |
           claim="$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
@@ -86,5 +79,8 @@ jobs:
             ")"
           echo "$claim"
 
-      # No NODE_AUTH_TOKEN: the OIDC exchange is the authentication.
-      - run: npm publish
+      # No NODE_AUTH_TOKEN: the OIDC exchange is the authentication. Logged at
+      # `http` so the exchange with the registry is visible in the run: npm
+      # reports a refused identity as "need auth", which reads the same as
+      # never having tried.
+      - run: npm publish --loglevel http
