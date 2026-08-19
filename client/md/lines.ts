@@ -131,6 +131,9 @@ export function moveBlock(content: string, range: SourceRange, direction: -1 | 1
     const neighbourStart = startOfBlock(lines, neighbourEnd)
 
     const neighbour = lines.slice(neighbourStart, neighbourEnd)
+    if (!closes(neighbour))
+      return content
+
     const separator = lines.slice(neighbourEnd, range[0])
     lines.splice(neighbourStart, range[1] - neighbourStart, ...block, ...separator, ...neighbour)
     return lines.join('\n')
@@ -145,9 +148,25 @@ export function moveBlock(content: string, range: SourceRange, direction: -1 | 1
   const neighbourEnd = endOfBlock(lines, neighbourStart)
 
   const neighbour = lines.slice(neighbourStart, neighbourEnd)
+  if (!closes(neighbour))
+    return content
+
   const separator = lines.slice(range[1], neighbourStart)
   lines.splice(range[0], neighbourEnd - range[0], ...neighbour, ...separator, ...block)
   return lines.join('\n')
+}
+
+/**
+ * Whether these lines open and close everything they contain.
+ *
+ * A block that sits inside a wrapper has half a wrapper for a neighbour: the
+ * lone `<v-drag …>` above it, or the `</v-drag>` below. Swapping with that
+ * moves the block out and leaves the wrapper holding nothing, which is how a
+ * position ended up on an empty element. Refusing is the only right answer
+ * here; a caller that means to move the whole wrapper passes its range.
+ */
+function closes(lines: string[]): boolean {
+  return lines.reduce((depth, line) => depth + tagDelta(line), 0) === 0
 }
 
 /**

@@ -638,3 +638,40 @@ describe('frontmatter formatting', () => {
     expect(raw).not.toContain('\n\n')
   })
 })
+
+describe('positioned blocks', () => {
+  const WRAPPED = [
+    '# Title', // 0
+    '', // 1
+    '<v-drag pos="490,20,352,118">', // 2
+    '', // 3
+    '![shot](/a.png)', // 4
+    '', // 5
+    '</v-drag>', // 6
+    '', // 7
+    'Body text.', // 8
+  ].join('\n')
+
+  it('gives the wrapper a position through its own prop', () => {
+    // Writing the directive here produced `<v-drag pos="…" v-drag="[…]">`,
+    // which Slidev stamps twice and Vue refuses to compile.
+    const next = writeDrag(WRAPPED, [2, 3], { x: 54, y: 18, w: 593, h: null, rotate: 0 })
+    expect(next.split('\n')[2]).toBe('<v-drag pos="54,18,593,_">')
+    expect(next).not.toContain('v-drag="[')
+    expect(readDrag(next, [2, 3])?.pos).toMatchObject({ x: 54, y: 18, w: 593 })
+  })
+
+  it('refuses to move a block out of the wrapper around it', () => {
+    // The neighbour above is a lone `<v-drag …>`: swapping with it would leave
+    // the wrapper holding nothing.
+    expect(moveBlock(WRAPPED, [4, 5], -1)).toBe(WRAPPED)
+    expect(moveBlock(WRAPPED, [4, 5], 1)).toBe(WRAPPED)
+  })
+
+  it('moves the whole wrapper when that is the range', () => {
+    const next = moveBlock(WRAPPED, [2, 7], 1).split('\n')
+    expect(next[0]).toBe('# Title')
+    expect(next[2]).toBe('Body text.')
+    expect(next.slice(4, 9)).toEqual(['<v-drag pos="490,20,352,118">', '', '![shot](/a.png)', '', '</v-drag>'])
+  })
+})

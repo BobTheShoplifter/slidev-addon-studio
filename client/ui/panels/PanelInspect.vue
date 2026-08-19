@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SourceRange } from '../../types'
 import { computed, ref, watch } from 'vue'
 import { configs } from '@slidev/client/env.ts'
 import { useCatalog } from '../../composables/useCatalog'
@@ -113,22 +114,39 @@ async function applyDraft() {
   await studio.commit(replaceBlock(studio.content(), range.value, draft.value), 'Edit block')
 }
 
-async function move(direction: -1 | 1) {
+/**
+ * The lines an arrange action owns.
+ *
+ * A block given a free position lives inside a `<v-drag>` wrapper, and the
+ * wrapper is part of the thing on screen: reordering only the block moved it
+ * out and left an empty wrapper behind, holding a position and nothing to
+ * position. Moving, duplicating or deleting takes the whole wrapper.
+ */
+const unit = computed<SourceRange | null>(() => {
   if (!range.value)
+    return null
+  const wrapper = drag.value
+  if (wrapper?.via === 'wrapper' && wrapper.open !== undefined && wrapper.close !== undefined)
+    return [wrapper.open, wrapper.close + 1]
+  return range.value
+})
+
+async function move(direction: -1 | 1) {
+  if (!unit.value)
     return
-  await studio.commit(moveBlock(studio.content(), range.value, direction), 'Reorder block')
+  await studio.commit(moveBlock(studio.content(), unit.value, direction), 'Reorder block')
 }
 
 async function duplicate() {
-  if (!range.value)
+  if (!unit.value)
     return
-  await studio.commit(insertAfter(studio.content(), range.value, block.value), 'Duplicate block')
+  await studio.commit(insertAfter(studio.content(), unit.value, getBlock(studio.content(), unit.value)), 'Duplicate block')
 }
 
 async function remove() {
-  if (!range.value)
+  if (!unit.value)
     return
-  await studio.commit(removeBlock(studio.content(), range.value), 'Delete block')
+  await studio.commit(removeBlock(studio.content(), unit.value), 'Delete block')
   selection.value = null
 }
 </script>

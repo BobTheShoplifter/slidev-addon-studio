@@ -22,6 +22,9 @@ import { findAttr, opensWithTag, writeAttr } from './tags'
  */
 export const DRAG_WRAPPER_PADDING = 4
 
+/** Slidev's own wrapper element, in either spelling. */
+const RE_DRAG_TAG = /^v-?drag$/i
+
 const RE_DRAG_OPEN = /^<v-drag((?:"[^"]*"|'[^']*'|[^>"'])*)>$/
 const RE_DRAG_CLOSE = /^<\/v-drag>$/
 
@@ -65,7 +68,14 @@ export interface DragInfo {
 
 export function readDrag(content: string, range: SourceRange): DragInfo | null {
   const block = getBlock(content, range)
-  if (opensWithTag(block)) {
+  const tag = opensWithTag(block)
+  if (tag) {
+    // The wrapper itself, selected rather than the block inside it. Its
+    // position is the `pos` prop; it must never be given the directive as well,
+    // which is markup Vue refuses to compile.
+    if (RE_DRAG_TAG.test(tag.name))
+      return { pos: parsePos(findAttr(block, 'pos')?.value), via: 'wrapper', open: range[0], close: closingLine(content, range[0]) }
+
     const attr = findAttr(block, 'v-drag')
     if (attr)
       return { pos: parsePos(attr.value), via: 'attr' }
@@ -78,6 +88,16 @@ export function readDrag(content: string, range: SourceRange): DragInfo | null {
   }
 
   return null
+}
+
+/** Line of the `</v-drag>` that closes the wrapper opening at `from`. */
+function closingLine(content: string, from: number): number | undefined {
+  const lines = toLines(content)
+  for (let i = from + 1; i < lines.length; i++) {
+    if (RE_DRAG_CLOSE.test(lines[i].trim()))
+      return i
+  }
+  return undefined
 }
 
 function findDragWrapper(content: string, range: SourceRange) {
@@ -113,8 +133,17 @@ export function writeDrag(content: string, range: SourceRange, pos: DragPos): st
   }
 
   const block = getBlock(content, range)
-  if (opensWithTag(block))
+  const tag = opensWithTag(block)
+  if (tag) {
+    // Writing the directive onto Slidev's own wrapper produced
+    // `<v-drag pos="…" v-drag="[…]">`, which Slidev then stamps with two
+    // `markdownSource` attributes and Vue refuses to compile: the whole deck
+    // stops rendering. The wrapper takes its position as the `pos` prop.
+    if (RE_DRAG_TAG.test(tag.name))
+      return replaceBlock(content, range, writeAttr(block, 'pos', formatPos(pos, 'prop')))
+
     return replaceBlock(content, range, writeAttr(block, 'v-drag', formatPos(pos, 'attr')))
+  }
 
   return replaceBlock(content, range, `<v-drag pos="${formatPos(pos, 'prop')}">\n\n${block}\n\n</v-drag>`)
 }
