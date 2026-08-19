@@ -52,6 +52,7 @@ const gizmo = useTransformGizmo({
   getContent: () => source.content.value,
   getNo: () => no.value,
   commit,
+  selectThrough: (x, y) => selectionApi.selectThrough(x, y),
 })
 
 const context: StudioContext = {
@@ -66,6 +67,7 @@ const context: StudioContext = {
   setNote: note => source.setNote(note),
   range: () => selection.value?.range ?? null,
   selectInserted: tag => selectionApi.selectInserted(tag),
+  selectThrough: (x, y) => selectionApi.selectThrough(x, y),
   go: target => nav.go(target),
 }
 

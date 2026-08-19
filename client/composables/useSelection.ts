@@ -106,11 +106,20 @@ export function useSelection(
     // The overlay and the handles handle themselves.
     if (isStudioChrome(event.target))
       return
+    // A field in the dock keeps focus otherwise, and the next Backspace edits
+    // that field instead of deleting the selected block.
+    if (isTyping(document.activeElement))
+      (document.activeElement as HTMLElement).blur()
+
     const target = targetFrom(event.target) ?? targetFromPoint(event.clientX, event.clientY)
     if (!target) {
       // Inside the slide but not on anything mapped: say so rather than
-      // dropping the click without a word.
-      missed.value = event.target instanceof Element && belongsToSlide(event.target, no())
+      // dropping the click without a word, and let go of what was selected,
+      // since leaving the outline behind reads as the click not registering.
+      const onSlide = event.target instanceof Element && belongsToSlide(event.target, no())
+      missed.value = onSlide
+      if (onSlide)
+        selection.value = null
       return
     }
     // Claim the gesture before Slidev's own `v-drag` handles or a link can.
@@ -123,10 +132,15 @@ export function useSelection(
   onDomEvent<PointerEvent>(document, 'pointermove', (event) => {
     if (!studioOpen.value || editing.value)
       return
-    // Hovering over the editor's own chrome is not hovering over the slide, and
-    // clearing the outline there made the selection flicker under the pointer.
-    if (isStudioChrome(event.target))
+    // Over the editor's own chrome, nothing on the slide is hovered. The
+    // selection overlay is the exception: it lies on top of the block it
+    // belongs to, and clearing there made the outline flicker under the
+    // pointer.
+    if (isStudioChrome(event.target)) {
+      if (!(event.target instanceof Element && event.target.closest('.studio-move')))
+        hovered.value = null
       return
+    }
     // Deliberately not the geometric fallback: hovering runs on every pointer
     // move, and reading computed styles for a whole slide there is enough work
     // to stall the renderer.
@@ -171,7 +185,19 @@ export function useSelection(
       return
 
     if (event.key === 'Escape') {
-      selection.value = null
+      // One layer at a time. A key pressed in a field belongs to that field,
+      // and the inline editor closes itself, so clearing the selection here as
+      // well meant cancelling an edit lost the block being edited.
+      //
+      // Tested on the node itself rather than on its ancestors: the editor is
+      // unmounted by the time this runs, and `closest` on a node that has been
+      // taken out of the document finds nothing.
+      if (isTyping(event.target) || isStudioChrome(event.target))
+        return
+      if (editing.value)
+        editing.value = false
+      else
+        selection.value = null
       return
     }
 
@@ -307,7 +333,20 @@ export function useSelection(
       selection.value = describe(el, no(), content())
   }
 
-  return { select, targetFrom, reselect, selectInserted }
+  /**
+   * Selects whatever is under the pointer, looking through Studio's own chrome.
+   *
+   * The selection overlay covers its block, so without this a click there could
+   * never reach anything: not a nested block inside the selection, and not
+   * another element that happens to lie underneath it.
+   */
+  function selectThrough(x: number, y: number) {
+    const target = throughChrome(x, y)
+    if (target && target.el !== selection.value?.el)
+      selection.value = target
+  }
+
+  return { select, targetFrom, reselect, selectInserted, selectThrough }
 }
 
 /**

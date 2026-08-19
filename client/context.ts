@@ -29,6 +29,12 @@ export interface StudioContext {
   range: () => SourceRange | null
   /** Selects a block that was just inserted, so it can be configured at once. */
   selectInserted: (tag?: string) => Promise<void>
+  /**
+   * Selects whatever is under a point, looking through the editor's own chrome.
+   * A press on the selection overlay that turns out to be a click rather than a
+   * drag uses this, so clicking again reaches what lies underneath.
+   */
+  selectThrough: (x: number, y: number) => void
   go: (no: number) => void
 }
 

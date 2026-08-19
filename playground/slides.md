@@ -97,4 +97,4 @@ Paragraph one of the probe.
 - alpha
 - beta
 
-<Badge label="second" />
+<Badge label="probe" />

@@ -52,6 +52,8 @@ export function useTransformGizmo(context: {
   /** The slide being edited, so a gesture cannot land on a different one. */
   getNo: () => number
   commit: (content: string, label: string, options?: { skipHmr?: boolean, keepSelection?: boolean }) => Promise<void>
+  /** Selects what lies under a point, for a press on the overlay that was a click. */
+  selectThrough: (x: number, y: number) => void
 }) {
   const { canvas } = context
 
@@ -202,8 +204,12 @@ export function useTransformGizmo(context: {
       return
 
     // A press that never moved is a click. Nothing was painted and nothing is
-    // written, so selecting an element cannot silently reposition it.
+    // written, so selecting an element cannot silently reposition it. It is
+    // also the only way to reach anything under the overlay, which covers the
+    // whole selection: clicking again selects what is beneath the pointer.
     if (!active.value) {
+      if (gesture?.type === 'move' && lastPress.at)
+        context.selectThrough(lastPress.x, lastPress.y)
       armed.value = false
       gesture = null
       preview.value = null
