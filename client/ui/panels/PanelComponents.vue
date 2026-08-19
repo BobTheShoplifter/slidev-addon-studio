@@ -39,15 +39,18 @@ const sourceFilters = [
   { id: 'builtin', label: 'Slidev' },
 ] as const
 
-async function insert(item: { name: string, snippet: string }) {
+async function insert(item: { name: string, snippet: string, tag?: string }) {
   const range = selection.value?.range
   await studio.commit(
     insertSnippet(studio.content(), item.snippet, range ? { mode: 'after', range } : { mode: 'append' }),
     `Insert ${item.name}`,
   )
   // Something just added is the thing you want to configure, so hand over to
-  // the Element panel with it already selected.
-  await studio.selectInserted(item.name)
+  // the Element panel with it already selected. Matched on the tag it renders,
+  // which for a Markdown block is nothing at all: a palette entry's name is a
+  // label, and matching on "Heading" or "Numbered list" found nothing, so the
+  // panel came back holding a different block.
+  await studio.selectInserted(item.tag)
   activePanel.value = 'inspect'
 }
 
@@ -126,7 +129,7 @@ onDomEvent<DragEvent>(window, 'drop', async (event) => {
         class="studio-card"
         draggable="true"
         :title="component.description ?? component.name"
-        @click="insert(component)"
+        @click="insert({ ...component, tag: component.name })"
         @dragstart="dragging = { label: component.name, snippet: component.snippet }"
         @dragend="dragging = null"
       >

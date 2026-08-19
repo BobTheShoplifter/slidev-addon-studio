@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useCatalog } from '../../composables/useCatalog'
 import { useStudio } from '../../context'
+import { useStudioHistory } from '../../composables/useSlideSource'
 import LayoutPreview from '../parts/LayoutPreview.vue'
 import PropField from '../parts/PropField.vue'
 import StudioField from '../parts/StudioField.vue'
@@ -12,6 +13,7 @@ import StudioField from '../parts/StudioField.vue'
  * which Slidev patches key by key, so untouched keys keep their formatting.
  */
 const studio = useStudio()
+const history = useStudioHistory()
 const { layouts } = useCatalog()
 
 const frontmatter = computed(() => studio.frontmatter())
@@ -91,8 +93,13 @@ watch(() => studio.note(), value => (note.value = value), { immediate: true })
 async function hide(skip: boolean) {
   const previous = Math.max(1, studio.no() - 1)
   await set('hide', skip ? true : null)
-  if (skip)
-    studio.go(previous)
+  if (!skip)
+    return
+
+  // Every later slide is renumbered, and undo replays a slide by its number,
+  // so an older entry would write its text over a different slide.
+  history.reset()
+  studio.go(previous)
 }
 
 function set(key: string, value: unknown) {

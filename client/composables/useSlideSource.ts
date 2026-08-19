@@ -41,6 +41,17 @@ async function send(no: number, data: SlidePatch) {
   }
 }
 
+/** The frontmatter block as the deck has it right now, not as it was cached. */
+async function currentFrontmatterRaw(no: number): Promise<string | null> {
+  try {
+    const info = await fetch(`/__slidev/slides/${no}.json`).then(r => r.json())
+    return typeof info?.frontmatterRaw === 'string' ? info.frontmatterRaw : null
+  }
+  catch {
+    return null
+  }
+}
+
 function push(entry: HistoryEntry) {
   undoStack.value.push(entry)
   if (undoStack.value.length > HISTORY_LIMIT)
@@ -83,7 +94,11 @@ export function useSlideSource(no: MaybeRefOrGetter<number>) {
    * Anything a line edit cannot safely rewrite falls back to the patch.
    */
   async function setFrontmatter(values: Record<string, any>, label: string) {
-    const currentRaw = info.value?.frontmatterRaw ?? ''
+    // Read the block back from the server first. The cached copy is whatever
+    // the last response left behind, and Slidev does not always answer a write
+    // with the new raw text, so patching the cache meant every control wrote
+    // over the key the one before it had set.
+    const currentRaw = await currentFrontmatterRaw(slideNo.value) ?? info.value?.frontmatterRaw ?? ''
     const { raw, unhandled } = patchFrontmatterRaw(currentRaw, values)
 
     const handled = Object.fromEntries(Object.entries(values).filter(([key]) => !unhandled.includes(key)))

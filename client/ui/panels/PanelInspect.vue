@@ -41,10 +41,21 @@ function valueOf(prop: (typeof editableProps.value)[number]) {
   return range.value ? readProp(studio.content(), range.value, prop) : null
 }
 
+/**
+ * Bumped after every prop write so the fields are rebuilt from the source.
+ *
+ * A write that changes nothing, such as clearing a prop the component requires,
+ * leaves the source as it was, so Vue sees the same bound value and leaves the
+ * field showing what was typed: the panel then claimed a value the deck does
+ * not have.
+ */
+const revision = ref(0)
+
 async function setProp(prop: (typeof editableProps.value)[number], value: string | boolean | null) {
   if (!range.value)
     return
   await studio.commit(writeProp(studio.content(), range.value, prop, value), `Set ${prop.name}`)
+  revision.value += 1
 }
 const block = computed(() => (range.value ? getBlock(studio.content(), range.value) : ''))
 const drag = computed(() => (range.value ? readDrag(studio.content(), range.value) : null))
@@ -59,7 +70,8 @@ watch([block, range], () => {
   classes.value = range.value ? readClasses(studio.content(), range.value) : ''
 }, { immediate: true })
 
-async function setPos(field: 'x' | 'y' | 'w' | 'h' | 'rotate', value: number) {
+/** An emptied height means "size to content", which is `null`, not zero. */
+async function setPos(field: 'x' | 'y' | 'w' | 'h' | 'rotate', value: number | null) {
   if (!range.value || !pos.value)
     return
   await studio.commit(
@@ -172,7 +184,7 @@ async function remove() {
             type="number"
             :value="pos.h === null ? '' : Math.round(pos.h)"
             placeholder="auto"
-            @change="setPos('h', +($event.target as HTMLInputElement).value)"
+            @change="setPos('h', ($event.target as HTMLInputElement).value.trim() === '' ? null : +($event.target as HTMLInputElement).value)"
           >
         </StudioField>
         <StudioField label="Rotation">
@@ -196,7 +208,7 @@ async function remove() {
       </p>
       <PropField
         v-for="prop in editableProps"
-        :key="prop.name"
+        :key="`${prop.name}-${revision}`"
         :prop="prop"
         :value="valueOf(prop)"
         @change="setProp(prop, $event)"
