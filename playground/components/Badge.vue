@@ -1,9 +1,3 @@
-<!-- @studio
-description: A small rounded label
-category: Playground
-snippet: |
-  <Badge label="new" />
--->
 <script setup lang="ts">
 withDefaults(defineProps<{
   label: string
@@ -36,3 +30,10 @@ withDefaults(defineProps<{
   background: #e6e7ea;
 }
 </style>
+
+<studio lang="yaml">
+description: A small rounded label
+category: Playground
+snippet: |
+  <Badge label="new" />
+</studio>

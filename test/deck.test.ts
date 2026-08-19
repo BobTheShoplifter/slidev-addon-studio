@@ -73,9 +73,11 @@ describe('prettifyRaw', () => {
 })
 
 describe('component metadata', () => {
-  it('reads the @studio block as YAML, nested props and all', () => {
+  it('reads the <studio> block as YAML, nested props and all', () => {
     const meta = parseStudioBlock([
-      '<!-- @studio',
+      '<template><span /></template>',
+      '',
+      '<studio lang="yaml">',
       'description: A rounded label',
       'category: Content',
       'snippet: |',
@@ -86,8 +88,7 @@ describe('component metadata', () => {
       '    options:',
       "      files: ../assets/mascots/*.svg",
       "      exclude: '*-stroke.svg'",
-      '-->',
-      '<template><span /></template>',
+      '</studio>',
     ].join('\n'))
 
     expect(meta.description).toBe('A rounded label')
@@ -99,9 +100,17 @@ describe('component metadata', () => {
     })
   })
 
-  it('survives a malformed @studio block instead of failing the build', () => {
-    expect(parseStudioBlock('<!-- @studio\n  : : :\n-->')).toEqual({})
+  it('survives a malformed block instead of failing the build', () => {
+    expect(parseStudioBlock('<studio lang="yaml">\n  : : :\n</studio>')).toEqual({})
     expect(parseStudioBlock('<template />')).toEqual({})
+  })
+
+  it('no longer reads the comment form, which a description can now use', () => {
+    // Supported for about ten minutes early on, and never by anyone. A leading
+    // HTML comment is how Slidev's own builtins carry their documentation, so
+    // reading it as configuration would take that away from them.
+    const meta = parseStudioBlock('<!-- @studio\ndescription: From a comment\n-->\n<template />')
+    expect(meta).toEqual({})
   })
 
   it('takes the usage example straight from the component doc comment', () => {

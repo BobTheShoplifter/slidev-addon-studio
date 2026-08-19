@@ -1,9 +1,3 @@
-<!-- @studio
-description: A bordered callout
-category: Playground
-snippet: |
-  <Note>Something worth pointing at.</Note>
--->
 <template>
   <div class="note">
     <slot />
@@ -20,3 +14,10 @@ snippet: |
   text-align: left;
 }
 </style>
+
+<studio lang="yaml">
+description: A bordered callout
+category: Playground
+snippet: |
+  <Note>Something worth pointing at.</Note>
+</studio>

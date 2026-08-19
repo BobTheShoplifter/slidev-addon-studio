@@ -229,9 +229,6 @@ props:
 </studio>
 ```
 
-A `<!-- @studio ... -->` comment is still read, for components written before
-the block existed.
-
 | Key | Meaning |
 | --- | --- |
 | `description` | One line shown under the name; defaults to the first line of the doc comment |
@@ -368,7 +365,7 @@ worth being dull about.
   its lines belong to a different slide, and following them would edit it.
 - A usage example that abbreviates, such as `:items="[{ … }, …]"`, is still
   inserted as the snippet but cannot be previewed, since it is not valid
-  JavaScript. Add `preview:` to the `@studio` block to give the palette
+  JavaScript. Add `preview:` to the `<studio>` block to give the palette
   something it can render.
 - If your project sets `slidev.markdown.markdownSetup` in its own Vite config,
   it replaces the addon's and click-to-select stops working. Studio warns on

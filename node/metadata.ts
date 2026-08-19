@@ -7,7 +7,7 @@ import YAML from 'yaml'
  *
  * Three sources, in order of authority:
  *
- * 1. An `@studio` block in the component, which is plain YAML and can describe
+ * 1. A `<studio>` block in the component, which is plain YAML and can describe
  *    anything, including where a prop's options come from.
  * 2. A usage example in the component's own leading doc comment, which most
  *    well-documented components already have and which makes a far better
@@ -75,13 +75,10 @@ interface RawPropMeta {
 }
 
 /**
- * The preferred form: a custom SFC block, which Vue's tooling understands and
- * ignores. An HTML comment before the `<script>` block makes some editors treat
- * the whole file as a template and lose syntax highlighting, so that form is
- * still read but no longer the one to recommend.
+ * A custom SFC block, which Vue's tooling understands and ignores, and which
+ * leaves the file highlighted as the Vue component it is.
  */
 const RE_STUDIO_SFC_BLOCK = /<studio\b[^>]*>([\s\S]*?)<\/studio>/
-const RE_STUDIO_COMMENT_BLOCK = /<!--\s*@studio\s*\n([\s\S]*?)-->/
 
 /**
  * Reads the optional Studio block. It is YAML so component authors can describe
@@ -100,7 +97,7 @@ const RE_STUDIO_COMMENT_BLOCK = /<!--\s*@studio\s*\n([\s\S]*?)-->/
  * ```
  */
 export function parseStudioBlock(code: string): StudioMeta {
-  const match = code.match(RE_STUDIO_SFC_BLOCK) ?? code.match(RE_STUDIO_COMMENT_BLOCK)
+  const match = code.match(RE_STUDIO_SFC_BLOCK)
   if (!match)
     return {}
   try {
@@ -114,7 +111,7 @@ export function parseStudioBlock(code: string): StudioMeta {
 
 const RE_DOC_COMMENT = /\/\*\*([\s\S]*?)\*\//
 /** Slidev's own builtins document themselves in a leading HTML comment. */
-const RE_HTML_COMMENT = /<!--(?!\s*@studio)([\s\S]*?)-->/
+const RE_HTML_COMMENT = /<!--([\s\S]*?)-->/
 
 /**
  * Pulls the first usage example out of a component's leading doc comment.

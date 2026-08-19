@@ -335,7 +335,7 @@ function describeFromDoc(code: string): string | undefined {
   // start of a line so the SFC's own block is what cuts it, not a `<template>`
   // written inside the doc comment as an example.
   const head = code.split(/^<template[\s>]/m)[0]
-  const comment = head.match(/\/\*\*([\s\S]*?)\*\//)?.[1] ?? head.match(/<!--(?!\s*@studio)([\s\S]*?)-->/)?.[1]
+  const comment = head.match(/\/\*\*([\s\S]*?)\*\//)?.[1] ?? head.match(/<!--([\s\S]*?)-->/)?.[1]
   if (!comment)
     return undefined
 
