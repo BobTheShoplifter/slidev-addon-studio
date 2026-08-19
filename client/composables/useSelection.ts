@@ -1,7 +1,7 @@
 import type { SourceRange, StudioTarget, TargetKind } from '../types'
 import { nextTick, onScopeDispose, watch, watchEffect } from 'vue'
 import { removeBlock } from '../md/lines'
-import { belongsToSlide, canvasElement, mappedElements, slideElement } from '../dom'
+import { belongsToSlide, mappedElements, slideElement } from '../dom'
 import { onDomEvent } from './useDomEvent'
 import { normalise, resolveRange } from '../md/locate'
 import { readDrag } from '../md/drag'
@@ -303,13 +303,17 @@ export function useSelection(
     observer?.disconnect()
     observer = null
 
-    // Watched on the canvas rather than on the slide, because a rebuild
-    // replaces the slide's own root: an observer bound to that root is watching
-    // a detached node from the first edit onwards, which is no observer at all.
-    const root = studioOpen.value ? canvasElement() : null
-    if (!root)
+    if (!studioOpen.value)
       return
 
+    // Watched on the document rather than on the slide, or even on the canvas.
+    // A rebuild replaces the slide's own root, so an observer bound there is
+    // watching a detached node from the first edit onwards. The canvas is no
+    // better: Studio's open state is remembered, so on an ordinary page load
+    // this effect runs before `#slide-content` exists, and nothing here is
+    // reactive to the DOM appearing later. The result was an editor that
+    // rebound correctly only if you had toggled it open by hand, which is why
+    // the second drag worked while testing and not while presenting.
     observer = new MutationObserver(() => {
       const current = selection.value
       if (rebinding || !current || document.contains(current.el))
@@ -322,7 +326,7 @@ export function useSelection(
       rebinding = true
       reselect(hint, current.kind, current.tag).finally(() => (rebinding = false))
     })
-    observer.observe(root, { childList: true, subtree: true })
+    observer.observe(document.body, { childList: true, subtree: true })
   })
 
   onScopeDispose(() => observer?.disconnect())
