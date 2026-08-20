@@ -60,3 +60,8 @@ declare module '@slidev/client/logic/dark.ts' {
   export const isDark: WritableComputedRef<boolean>
   export function toggleDark(value?: boolean): boolean
 }
+
+declare module '@slidev/client/logic/contextMenu.ts' {
+  export function openContextMenu(x: number, y: number): void
+  export function closeContextMenu(): void
+}

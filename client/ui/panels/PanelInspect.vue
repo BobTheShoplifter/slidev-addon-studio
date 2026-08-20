@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { SourceRange } from '../../types'
 import { computed, ref, watch } from 'vue'
 import { configs } from '@slidev/client/env.ts'
 import { useCatalog } from '../../composables/useCatalog'
 import { useStudio } from '../../context'
 import { readProp, writeProp } from '../../md/props'
-import { parsePos, readDrag, removeDrag, writeDrag } from '../../md/drag'
-import { getBlock, moveBlock, removeBlock, insertAfter, replaceBlock } from '../../md/lines'
+import { readDrag, writeDrag } from '../../md/drag'
+import { getBlock, replaceBlock } from '../../md/lines'
 import { canStyle, readClasses, writeClasses } from '../../md/classes'
+import { deleteBlock, duplicateBlock, freePosition, moveBlockBy, returnToFlow } from '../../actions'
 import { missed, selection } from '../../state'
 import PropField from '../parts/PropField.vue'
 import StudioField from '../parts/StudioField.vue'
@@ -87,19 +87,13 @@ async function setPos(field: 'x' | 'y' | 'w' | 'h' | 'rotate', value: number | n
 }
 
 async function toFreePosition() {
-  if (!range.value || !selection.value)
-    return
-  const box = studio.canvas.boxOf(selection.value.el)
-  await studio.commit(
-    writeDrag(studio.content(), range.value, { x: box.x, y: box.y, w: box.w, h: null, rotate: 0 }),
-    'Free position',
-  )
+  if (selection.value)
+    await freePosition(studio, selection.value)
 }
 
 async function toFlow() {
-  if (!range.value)
-    return
-  await studio.commit(removeDrag(studio.content(), range.value), 'Return to flow')
+  if (selection.value)
+    await returnToFlow(studio, selection.value)
 }
 
 async function applyClasses() {
@@ -114,40 +108,19 @@ async function applyDraft() {
   await studio.commit(replaceBlock(studio.content(), range.value, draft.value), 'Edit block')
 }
 
-/**
- * The lines an arrange action owns.
- *
- * A block given a free position lives inside a `<v-drag>` wrapper, and the
- * wrapper is part of the thing on screen: reordering only the block moved it
- * out and left an empty wrapper behind, holding a position and nothing to
- * position. Moving, duplicating or deleting takes the whole wrapper.
- */
-const unit = computed<SourceRange | null>(() => {
-  if (!range.value)
-    return null
-  const wrapper = drag.value
-  if (wrapper?.via === 'wrapper' && wrapper.open !== undefined && wrapper.close !== undefined)
-    return [wrapper.open, wrapper.close + 1]
-  return range.value
-})
-
 async function move(direction: -1 | 1) {
-  if (!unit.value)
-    return
-  await studio.commit(moveBlock(studio.content(), unit.value, direction), 'Reorder block')
+  if (selection.value)
+    await moveBlockBy(studio, selection.value, direction)
 }
 
 async function duplicate() {
-  if (!unit.value)
-    return
-  await studio.commit(insertAfter(studio.content(), unit.value, getBlock(studio.content(), unit.value)), 'Duplicate block')
+  if (selection.value)
+    await duplicateBlock(studio, selection.value)
 }
 
 async function remove() {
-  if (!unit.value)
-    return
-  await studio.commit(removeBlock(studio.content(), unit.value), 'Delete block')
-  selection.value = null
+  if (selection.value)
+    await deleteBlock(studio, selection.value)
 }
 </script>
 

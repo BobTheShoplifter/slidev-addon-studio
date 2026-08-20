@@ -2,12 +2,12 @@
 import type { StudioContext } from '../context'
 import { useNav } from '@slidev/client'
 import { useWindowSize } from '@vueuse/core'
-import { computed, provide, watch, watchEffect } from 'vue'
+import { computed, onScopeDispose, provide, watch, watchEffect } from 'vue'
 import { useSelection } from '../composables/useSelection'
 import { useSlideCanvas } from '../composables/useSlideCanvas'
 import { useSlideSource } from '../composables/useSlideSource'
 import { useTransformGizmo } from '../composables/useTransformGizmo'
-import { studioKey } from '../context'
+import { studioContext, studioKey } from '../context'
 import { dockWidth, lastError, selection, studioOpen } from '../state'
 import InlineEditor from './InlineEditor.vue'
 import SelectionLayer from './SelectionLayer.vue'
@@ -72,6 +72,11 @@ const context: StudioContext = {
 }
 
 provide(studioKey, context)
+
+// Also outside the component tree, for Slidev's setup files: the context menu
+// is built there and has no way to inject.
+studioContext.value = context
+onScopeDispose(() => (studioContext.value = null))
 
 // Selection belongs to one slide; navigating away drops it.
 watch(no, () => (selection.value = null))

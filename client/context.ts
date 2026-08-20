@@ -2,7 +2,7 @@ import type { InjectionKey } from 'vue'
 import type { SourceRange } from './types'
 import type { useSlideCanvas } from './composables/useSlideCanvas'
 import type { useTransformGizmo } from './composables/useTransformGizmo'
-import { inject } from 'vue'
+import { inject, shallowRef } from 'vue'
 
 /**
  * Everything a panel needs, assembled once in `StudioRoot` and provided down.
@@ -39,6 +39,16 @@ export interface StudioContext {
 }
 
 export const studioKey = Symbol('slidev-studio') as InjectionKey<StudioContext>
+
+/**
+ * The same context, reachable from outside the component tree.
+ *
+ * Slidev's setup files, the context menu among them, run before and outside any
+ * component, so `inject` is not available to them. `StudioRoot` fills this in
+ * while it is mounted and empties it when it is not, which is also how a caller
+ * can tell whether there is an editor to talk to at all.
+ */
+export const studioContext = shallowRef<StudioContext | null>(null)
 
 export function useStudio(): StudioContext {
   const context = inject(studioKey)

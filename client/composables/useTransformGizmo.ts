@@ -81,6 +81,12 @@ export function useTransformGizmo(context: {
   let lastPress = { at: 0, x: 0, y: 0 }
 
   function start(event: PointerEvent, next: Gesture) {
+    // Only the primary button drags. A right-click on the selection overlay
+    // otherwise armed a gesture and swallowed the event that opens the context
+    // menu, so the menu never appeared over the very thing it is about.
+    if (event.button !== 0)
+      return
+
     const current = context.getTarget()
     if (!current || !current.range)
       return

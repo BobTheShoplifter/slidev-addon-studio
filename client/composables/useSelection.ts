@@ -1,6 +1,7 @@
 import type { SourceRange, StudioTarget, TargetKind } from '../types'
 import { nextTick, onScopeDispose, watch, watchEffect } from 'vue'
 import { removeBlock } from '../md/lines'
+import { openContextMenu } from '@slidev/client/logic/contextMenu.ts'
 import { belongsToSlide, mappedElements, slideElement } from '../dom'
 import { onDomEvent } from './useDomEvent'
 import { normalise, resolveRange } from '../md/locate'
@@ -111,6 +112,52 @@ export function useSelection(
     if (target)
       selection.value = target
   }
+
+  /**
+   * Right-click opens the slide's menu anywhere on the canvas side.
+   *
+   * Slidev binds its context menu to the slide container, and while Studio is
+   * open two things sit outside it: the selection overlay and its handles,
+   * teleported to `body` so the deck's transform cannot scale them, and the
+   * margin that appears around the deck once it is scaled down to make room
+   * for the dock. A right-click on either landed nowhere and the browser's own
+   * menu came up instead, which is not the menu anyone wanted there.
+   */
+  onDomEvent<MouseEvent>(document, 'contextmenu', (event) => {
+    if (!studioOpen.value || editing.value)
+      return
+    // Slidev's own escape hatch, kept working: Shift asks for the browser's.
+    if (event.shiftKey)
+      return
+
+    const target = event.target
+    if (!(target instanceof Element))
+      return
+    // The editor's own panels keep the browser's menu, which is the useful one
+    // around a text field.
+    if (target.closest('.studio-dock, .studio-toolbar, .studio-inline'))
+      return
+
+    event.preventDefault()
+    openContextMenu(event.pageX, event.pageY)
+  }, { capture: true })
+
+  /**
+   * Right-click selects what it points at, and then lets the menu open.
+   *
+   * The menu offers the selected block's own actions, so it has to be pointing
+   * at something: without this, right-clicking a block you had not clicked
+   * first offered nothing to act on.
+   */
+  onDomEvent<PointerEvent>(document, 'pointerdown', (event) => {
+    if (!studioOpen.value || event.button !== 2 || editing.value)
+      return
+    if (isStudioChrome(event.target))
+      return
+    const target = targetFrom(event.target) ?? targetFromPoint(event.clientX, event.clientY)
+    if (target)
+      selection.value = target
+  }, { capture: true })
 
   onDomEvent<PointerEvent>(document, 'pointerdown', (event) => {
     if (!studioOpen.value || event.button !== 0 || editing.value)
