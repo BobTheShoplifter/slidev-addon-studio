@@ -2,6 +2,7 @@ import type { ContextMenuItem } from '@slidev/types'
 import type { ComputedRef } from 'vue'
 import { computed } from 'vue'
 import {
+  canReorder,
   deleteBlock,
   duplicateBlock,
   editText,
@@ -95,6 +96,7 @@ export default (items: ComputedRef<ContextMenuItem[]>): ComputedRef<ContextMenuI
         icon: 'i-carbon:copy',
         label: 'Duplicate',
         action: () => duplicateBlock(studio, target),
+        disabled: !canReorder(target),
       },
       {
         icon: 'i-carbon:trash-can',
@@ -108,14 +110,14 @@ export default (items: ComputedRef<ContextMenuItem[]>): ComputedRef<ContextMenuI
         icon: 'i-carbon:arrow-up',
         label: 'Move earlier',
         action: () => moveBlockBy(studio, target, -1),
-        disabled: target.nested,
+        disabled: !canReorder(target),
       },
       {
         small: true,
         icon: 'i-carbon:arrow-down',
         label: 'Move later',
         action: () => moveBlockBy(studio, target, 1),
-        disabled: target.nested,
+        disabled: !canReorder(target),
       },
     ]
 

@@ -37,6 +37,107 @@ export function insertAfter(content: string, range: SourceRange, text: string): 
   return lines.join('\n')
 }
 
+const RE_ITEM = /^(\s*)([-*+]|\d+[.)])\s+/
+
+/**
+ * The lines one list item owns: its own, and anything nested under it.
+ *
+ * Studio maps an item to the single line it is written on, which is right for
+ * selecting and editing it. It is not the right unit to copy or move: a bullet
+ * with sub-bullets is one thing to the person looking at it, and leaving the
+ * children behind would re-parent them onto whatever ends up above them.
+ */
+export function listItemUnit(content: string, start: number): SourceRange | null {
+  const lines = toLines(content)
+  const own = lines[start]?.match(RE_ITEM)
+  if (!own)
+    return null
+
+  const indent = own[1].length
+  let end = start + 1
+  while (end < lines.length) {
+    const line = lines[end]
+    // A blank line ends the list, so it ends the item too.
+    if (!line.trim())
+      break
+    const deeper = (line.match(/^\s*/)?.[0].length ?? 0) > indent
+    if (!deeper)
+      break
+    end++
+  }
+
+  return [start, end]
+}
+
+/**
+ * A copy of a list item, directly under it.
+ *
+ * Not `insertAfter`: that leaves a blank line, which is what separates two
+ * blocks and what ends a list. Used on an item it split the list in two and
+ * stripped the copy's indentation, so a sub-bullet came back as a top level
+ * one under a different parent.
+ */
+export function duplicateListItem(content: string, start: number): string | null {
+  const unit = listItemUnit(content, start)
+  if (!unit)
+    return null
+  const lines = toLines(content)
+  lines.splice(unit[1], 0, ...lines.slice(unit[0], unit[1]))
+  return lines.join('\n')
+}
+
+/**
+ * Swaps a list item with the sibling above or below it.
+ *
+ * `moveBlock` looks for the next *block*, and from inside a list that is the
+ * paragraph after the whole list, so an item moved down jumped over its
+ * remaining siblings and landed under a different parent. Siblings are the ones
+ * at the same indent, in the same run of list lines.
+ */
+export function moveListItem(content: string, start: number, direction: -1 | 1): string | null {
+  const unit = listItemUnit(content, start)
+  if (!unit)
+    return null
+
+  const lines = toLines(content)
+  const indent = lines[start].match(RE_ITEM)![1].length
+
+  const sibling = (from: number, step: -1 | 1): number | null => {
+    for (let i = from; i >= 0 && i < lines.length; i += step) {
+      const line = lines[i]
+      if (!line.trim())
+        return null
+      const item = line.match(RE_ITEM)
+      const at = (line.match(/^\s*/)?.[0].length ?? 0)
+      if (item && at === indent)
+        return i
+      // A shallower line means the run of siblings has ended.
+      if (at < indent)
+        return null
+    }
+    return null
+  }
+
+  if (direction === -1) {
+    const above = sibling(unit[0] - 1, -1)
+    if (above === null)
+      return null
+    const block = lines.splice(unit[0], unit[1] - unit[0])
+    lines.splice(above, 0, ...block)
+    return lines.join('\n')
+  }
+
+  const below = sibling(unit[1], 1)
+  if (below === null)
+    return null
+  const belowUnit = listItemUnit(content, below)!
+  const block = lines.splice(unit[0], unit[1] - unit[0])
+  // The lines below shifted up by what was removed.
+  const at = belowUnit[1] - (unit[1] - unit[0])
+  lines.splice(at, 0, ...block)
+  return lines.join('\n')
+}
+
 export function append(content: string, text: string): string {
   const body = content.replace(/\s+$/, '')
   return `${body}\n\n${text.trim()}\n`
