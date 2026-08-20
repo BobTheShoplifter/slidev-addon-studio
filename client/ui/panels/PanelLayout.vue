@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import type { ObjectRow } from '../../md/literals'
+import { formatObjectArray, formatStringArray, parseObjectArray, parseStringArray } from '../../md/literals'
 import { useCatalog } from '../../composables/useCatalog'
 import { useStudio } from '../../context'
 import { useStudioHistory } from '../../composables/useSlideSource'
@@ -60,7 +62,28 @@ function propValue(name: string): string | boolean | null {
     return null
   // Booleans must stay booleans: stringified, `stroke: true` read as the text
   // "true", the control showed "No", and choosing "No" changed nothing.
-  return typeof value === 'boolean' ? value : String(value)
+  if (typeof value === 'boolean')
+    return value
+
+  /*
+   * Frontmatter holds real YAML, so a key can be a list of records: a split
+   * layout's panes, an agenda's items. The controls that edit those read the
+   * literal a component prop would be written with, and handing them `String()`
+   * of a parsed array produced "[object Object],[object Object]", which is
+   * neither editable nor readable. Writing the literal back out gives the same
+   * row editor the Element panel uses.
+   */
+  if (Array.isArray(value)) {
+    if (value.length && value.every(entry => entry !== null && typeof entry === 'object' && !Array.isArray(entry)))
+      return formatObjectArray(value as ObjectRow[])
+    if (value.every(entry => typeof entry === 'string'))
+      return formatStringArray(value as string[])
+  }
+
+  if (typeof value === 'object')
+    return JSON.stringify(value)
+
+  return String(value)
 }
 
 async function setProp(prop: { name: string, type?: string }, value: string | boolean | null) {
@@ -73,6 +96,15 @@ function coerce(type: string | undefined, value: string | boolean | null) {
     return null
   if (typeof value === 'boolean')
     return value
+  // A list edited as rows comes back as the literal, and frontmatter wants the
+  // structure, not the text of it.
+  const rows = parseObjectArray(value)
+  if (rows)
+    return rows
+  const list = parseStringArray(value)
+  if (list)
+    return list
+
   const kind = (type ?? '').toLowerCase()
   if (kind.includes('number') && !kind.includes('string') && value.trim() !== '' && !Number.isNaN(Number(value)))
     return Number(value)
