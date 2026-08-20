@@ -41,5 +41,23 @@ export default (_nav: NavOperations, shortcuts: ShortcutOptions[]): ShortcutOpti
       key: 'ctrl+shift+z',
       fn: () => studioOpen.value && canRedo.value && history.redo(),
     },
+    /*
+     * The same two again under Cmd, for macOS.
+     *
+     * Slidev hands each `key` to VueUse's magic keys, which understands `+` for
+     * a combination but has no syntax for "either of these", so one entry
+     * cannot cover both modifiers. Bound only to Ctrl, undo did nothing at all
+     * on a Mac, which is most of the people this editor is for.
+     */
+    {
+      name: 'studio_undo_meta',
+      key: 'meta+z',
+      fn: () => studioOpen.value && canUndo.value && history.undo(),
+    },
+    {
+      name: 'studio_redo_meta',
+      key: 'meta+shift+z',
+      fn: () => studioOpen.value && canRedo.value && history.redo(),
+    },
   ]
 }
