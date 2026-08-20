@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { BlockShape } from '../md/inline'
 import { computed, nextTick, ref, watch } from 'vue'
-import { blockShape, serialiseBlock } from '../md/inline'
+import { blockShape, canEditVisually, serialiseBlock } from '../md/inline'
 import { toggleBullet, toggleHeading, toggleQuote, toggleWrap, toLink } from '../md/format'
 import { getBlock, replaceBlock } from '../md/lines'
 import { editing, reportError, selection } from '../state'
@@ -59,10 +59,11 @@ watch(editing, async (open) => {
   const found = element.getBoundingClientRect()
   rect.value = { left: found.left, top: found.top, width: Math.max(found.width, 260) }
 
-  // Visual editing only where the rendered block can be written back as it
-  // stands. Testing the real markup, rather than trusting the block's kind,
-  // is what keeps a component or a styled span out of the visual path.
-  mode.value = shape.value && serialiseBlock(element, shape.value) !== null ? 'visual' : 'markdown'
+  // Visual editing only where the rendered block can be written back as the
+  // Markdown that is already there. Testing the real markup against the real
+  // source, rather than trusting the block's kind, is what keeps a component,
+  // a styled span or a shape the serialiser would flatten out of this path.
+  mode.value = shape.value && canEditVisually(source, element, shape.value) ? 'visual' : 'markdown'
 
   await nextTick()
   if (mode.value === 'visual')

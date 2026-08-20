@@ -1,4 +1,4 @@
-import type { CatalogComponent, DragPos, SourceRange, StudioAsset } from '../types'
+import type { DragPos, SourceRange, StudioAsset } from '../types'
 import { formatPos } from './drag'
 import { append, insertAfter } from './lines'
 
@@ -19,15 +19,6 @@ export function positioned(snippet: string, pos: DragPos): string {
   if (/^<[A-Za-z]/.test(trimmed) && !trimmed.includes('\n'))
     return trimmed.replace(/^<([A-Za-z][\w.-]*)/, `<$1 v-drag="${formatPos(pos, 'attr')}"`)
   return `<v-drag pos="${formatPos(pos, 'prop')}">\n\n${trimmed}\n\n</v-drag>`
-}
-
-export function componentSnippet(component: CatalogComponent, props: Record<string, string> = {}): string {
-  const entries = Object.entries(props).filter(([, value]) => value !== '' && value != null)
-  if (!entries.length)
-    return component.snippet
-
-  const attrs = entries.map(([key, value]) => ` ${key}="${value}"`).join('')
-  return component.snippet.replace(/^(\s*<[A-Za-z][\w.-]*)/, `$1${attrs}`)
 }
 
 export function assetSnippet(asset: StudioAsset, alt = ''): string {

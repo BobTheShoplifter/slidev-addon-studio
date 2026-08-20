@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import type { BasicBlock } from '../../blocks'
-import type { CatalogComponent } from '../../types'
 import { ref } from 'vue'
 import { onDomEvent } from '../../composables/useDomEvent'
 import { CANVAS_SELECTOR } from '../../dom'

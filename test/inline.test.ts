@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockShape, serialiseBlock, serialiseInline } from '../client/md/inline'
+import { blockShape, canEditVisually, serialiseBlock, serialiseInline } from '../client/md/inline'
 
 /**
  * The serialiser walks a handful of standard node properties, so the tests
@@ -107,5 +107,32 @@ describe('serialiseBlock', () => {
     const shape = blockShape('- one')!
     const list = el('ul', [el('li', [el('span', [text('one')], { class: 'red' })])])
     expect(serialiseBlock(list, shape)).toBeNull()
+  })
+})
+
+describe('canEditVisually', () => {
+  it('accepts a block it can reproduce', () => {
+    const shape = blockShape('## A **bold** heading')!
+    const rendered = el('h2', [text('A '), el('strong', [text('bold')]), text(' heading')])
+    expect(canEditVisually('## A **bold** heading', rendered, shape)).toBe(true)
+  })
+
+  it('ignores escaping and spacing, which are faithful', () => {
+    const shape = blockShape('2 * 3 * 4')!
+    expect(canEditVisually('2 * 3 * 4', el('p', [text('2 * 3 * 4')]), shape)).toBe(true)
+  })
+
+  it('refuses a block it would quietly reshape', () => {
+    // Two paragraphs in one quote come back as two `>` lines with the blank one
+    // between them gone, which renders as a single paragraph.
+    const shape = blockShape('> one\n>\n> two')!
+    const quote = el('blockquote', [el('p', [text('one')]), el('p', [text('two')])])
+    expect(canEditVisually('> one\n>\n> two', quote, shape)).toBe(false)
+  })
+
+  it('refuses a block whose markup it does not recognise', () => {
+    const shape = blockShape('# Ikke bli <span class="red">hacket.</span>')!
+    const heading = el('h1', [text('Ikke bli '), el('span', [text('hacket.')], { class: 'red' })])
+    expect(canEditVisually('# Ikke bli <span class="red">hacket.</span>', heading, shape)).toBe(false)
   })
 })

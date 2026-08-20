@@ -1,5 +1,5 @@
 import type { CatalogComponent, CatalogLayout } from '../types'
-import { components, config, enabled, layouts, palette } from 'virtual:slidev-studio/catalog'
+import { components, config, layouts, palette } from 'virtual:slidev-studio/catalog'
 import { computed, ref } from 'vue'
 
 /**
@@ -12,7 +12,6 @@ import { computed, ref } from 'vue'
 const all = components as CatalogComponent[]
 const allLayouts = layouts as CatalogLayout[]
 
-export const catalogEnabled = enabled as boolean
 
 /** The deck's own colours, read from its stylesheets. */
 export const studioPalette = palette as { value: string, name: string, resolved: string }[]

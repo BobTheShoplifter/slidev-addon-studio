@@ -205,3 +205,29 @@ export function serialiseBlock(root: InlineElement, shape: BlockShape): string |
 
   return lines.join('\n')
 }
+
+/**
+ * Whether the block can be handed to the visual editor at all.
+ *
+ * Not "did the serialiser return something", which only says it recognised
+ * every tag: it also has to reproduce the Markdown that is already there. A
+ * blockquote holding two paragraphs comes back as two `>` lines with the blank
+ * one between them gone, which reads the same to the serialiser and renders as
+ * one paragraph in the deck. Comparing against the source catches that whole
+ * class of near-miss before anything is edited.
+ *
+ * The comparison ignores escaping and runs of whitespace, since writing `2 \* 3`
+ * for `2 * 3` is a faithful round trip, not a difference.
+ */
+export function canEditVisually(source: string, root: InlineElement, shape: BlockShape): boolean {
+  const written = serialiseBlock(root, shape)
+  return written !== null && plain(written) === plain(source)
+}
+
+/** Markdown reduced to what it says, so escaping and spacing do not count. */
+function plain(markdown: string): string {
+  return markdown
+    .replace(/\\([\\`*_[\]])/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+}

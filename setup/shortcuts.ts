@@ -14,7 +14,14 @@ import { studioOpen } from '../client/state'
  * selection meant cancelling an inline edit also lost the block being edited.
  * `useSelection` owns it.
  */
+const authoring = __DEV__ && __SLIDEV_FEATURE_EDITOR__
+
 export default (_nav: NavOperations, shortcuts: ShortcutOptions[]): ShortcutOptions[] => {
+  // Same reason as the context menu: nothing to toggle in a built deck, and
+  // `E` should stay free for whatever the deck itself wants to do with it.
+  if (!authoring)
+    return shortcuts
+
   const history = useStudioHistory()
 
   return [

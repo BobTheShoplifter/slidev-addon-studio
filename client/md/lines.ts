@@ -37,12 +37,6 @@ export function insertAfter(content: string, range: SourceRange, text: string): 
   return lines.join('\n')
 }
 
-export function insertBefore(content: string, range: SourceRange, text: string): string {
-  const lines = toLines(content)
-  lines.splice(range[0], 0, ...toLines(text.trim()), '')
-  return lines.join('\n')
-}
-
 export function append(content: string, text: string): string {
   const body = content.replace(/\s+$/, '')
   return `${body}\n\n${text.trim()}\n`

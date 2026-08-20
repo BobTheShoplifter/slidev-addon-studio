@@ -29,7 +29,10 @@ export function studioPlugin(options: ResolvedSlidevOptions): Plugin {
 
   // Handed to `studioMarkdownSetup`, which runs from the merged Vite config and
   // has no other way to learn what the deck asked for.
-  ;(globalThis as any).__SLIDEV_STUDIO_ANNOTATE__ = config.annotate ?? 'all'
+  // Off outside dev: the annotations exist so the editor can trace an element
+  // back to its Markdown, and a built deck has no editor. Leaving them on put
+  // `data-studio-src="0,1"` line references into published HTML.
+  ;(globalThis as any).__SLIDEV_STUDIO_ANNOTATE__ = isDev ? (config.annotate ?? 'all') : 'off'
 
   return {
     name: 'slidev-studio',
