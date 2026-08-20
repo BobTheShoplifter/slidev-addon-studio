@@ -1,7 +1,7 @@
 {
   "name": "slidev-addon-studio",
   "type": "module",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A visual editor for Slidev. Select, drag, resize, animate and compose slides on the canvas, with every change written back to your Markdown.",
   "license": "MIT",
   "packageManager": "pnpm@11.20.0",
