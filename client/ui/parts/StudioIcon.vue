@@ -33,6 +33,7 @@ const paths: Record<string, string> = {
   italic: 'M10 5h8M6 19h8M14 5l-4 14',
   code: 'M9 8l-5 4 5 4M15 8l5 4-5 4',
   strike: 'M5 12h14M8 8a3 3 0 013-3h2a3 3 0 013 3M8 16a3 3 0 003 3h2a3 3 0 003-3',
+  underline: 'M7 5v6a5 5 0 0010 0V5M5 19h14',
   link: 'M10 13a4 4 0 006 .5l2-2a4 4 0 00-6-6l-1 1M14 11a4 4 0 00-6-.5l-2 2a4 4 0 006 6l1-1',
   h1: 'M4 6v12M12 6v12M4 12h8M17 18v-8l-2 1.5',
   h2: 'M4 6v12M11 6v12M4 12h7M15 10a2 2 0 114 0c0 2-4 3-4 6h4',

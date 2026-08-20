@@ -20,6 +20,35 @@ export interface FormatResult {
   end: number
 }
 
+/**
+ * The same, for a pair that is not the same string at both ends.
+ *
+ * `toggleWrap` reasons about runs of one symbol, which is what Markdown's own
+ * marks are made of. An underline has no Markdown, so it is written as the
+ * inline HTML it renders as, and that needs an opening and a closing form.
+ */
+export function toggleTagWrap(selection: Selection, open: string, close: string): FormatResult {
+  const { text, start, end } = selection
+  const before = text.slice(0, start)
+  const inner = text.slice(start, end)
+  const after = text.slice(end)
+
+  if (inner.startsWith(open) && inner.endsWith(close) && inner.length >= open.length + close.length) {
+    const stripped = inner.slice(open.length, inner.length - close.length)
+    return { text: before + stripped + after, start, end: start + stripped.length }
+  }
+
+  if (before.endsWith(open) && after.startsWith(close)) {
+    return {
+      text: before.slice(0, -open.length) + inner + after.slice(close.length),
+      start: start - open.length,
+      end: end - open.length,
+    }
+  }
+
+  return { text: before + open + inner + close + after, start: start + open.length, end: end + open.length }
+}
+
 /** Wraps the selection in a marker, or unwraps it if it is already wrapped. */
 export function toggleWrap(selection: Selection, marker: string): FormatResult {
   const { text, start, end } = selection

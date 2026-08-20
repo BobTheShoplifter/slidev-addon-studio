@@ -2,8 +2,8 @@
 import type { BlockShape } from '../md/inline'
 import type { SourceRange } from '../types'
 import { computed, nextTick, ref, watch } from 'vue'
-import { blockShape, canEditVisually, serialiseBlock } from '../md/inline'
-import { toggleBullet, toggleHeading, toggleQuote, toggleWrap, toLink } from '../md/format'
+import { blockShape, canEditContainer, canEditVisually, serialiseBlock, serialiseContainer } from '../md/inline'
+import { toggleBullet, toggleHeading, toggleQuote, toggleTagWrap, toggleWrap, toLink } from '../md/format'
 import { getBlock, replaceBlock } from '../md/lines'
 import { editing, reportError, selection } from '../state'
 import { useStudio } from '../context'
@@ -49,11 +49,62 @@ let source = ''
  */
 let held: SourceRange | null = null
 
+/*
+ * Whether what was handed over is one block or a run of them.
+ *
+ * A text box is the second: the browser owns the whole slot, so Enter starts a
+ * paragraph, a second Enter on an empty bullet leaves the list, and a selection
+ * can run across two paragraphs, all without the editor closing and reopening
+ * around a different element. Which one is in play decides which serialiser
+ * writes the result back.
+ */
+let heldKind: 'block' | 'container' | 'prop' = 'block'
+
+
+
 const range = computed(() => selection.value?.range ?? null)
+
+/** A frontmatter value is a plain string, so it gets no formatting controls. */
+const editingProp = computed(() => !!selection.value?.prop)
 
 watch(editing, async (open) => {
   if (!open) {
     release()
+    return
+  }
+
+  /*
+   * Text a layout was handed, rather than text the slide holds.
+   *
+   * `eyebrow`, `title`, a speaker's name: the words are in the slide's
+   * frontmatter and the layout renders them, so there is no line of Markdown to
+   * select and nothing in the block editor applies. It is a plain string, so it
+   * is edited as one and written straight back to the key it came from.
+   */
+  const propKey = selection.value?.prop
+  const propEl = selection.value?.el
+  if (propKey && propEl) {
+    heldKind = 'prop'
+    held = null
+    shape.value = null
+    source = String(studio.frontmatter()[propKey] ?? '')
+    draft.value = source
+    mode.value = 'visual'
+    const at = propEl.getBoundingClientRect()
+    rect.value = { left: at.left, top: at.top, width: Math.max(at.width, 260) }
+    await nextTick()
+    hold(propEl)
+
+    // The whole value comes up selected. It is one string standing for one key,
+    // the way a title placeholder behaves, so the first thing typed replaces it
+    // rather than landing against whatever is already there.
+    const chosen = window.getSelection()
+    if (chosen) {
+      const all = document.createRange()
+      all.selectNodeContents(propEl)
+      chosen.removeAllRanges()
+      chosen.addRange(all)
+    }
     return
   }
 
@@ -73,12 +124,28 @@ watch(editing, async (open) => {
     : null
   const listRange = list ? parseRange(list.dataset.studioSrc) : null
 
-  const target = listRange ?? range.value
-  const element = (listRange && list) || picked
+  let target = listRange ?? range.value
+  let element = (listRange && list) || picked
   if (!target || !element)
     return
-  held = target
 
+  // Prefer the whole run of blocks around it, so the slot behaves like one text
+  // box. Only when that cannot be written back unchanged does this fall back to
+  // the single block, and then to editing the Markdown.
+  heldKind = 'block'
+  // Not named `box`: that is the Markdown textarea's ref, and shadowing it here
+  // made the fallback path dereference this instead of the field it meant.
+  const run = containerOf(element)
+  if (run) {
+    const runSource = getBlock(studio.content(), run.range)
+    if (canEditContainer(runSource, run.el as any, verbatim)) {
+      heldKind = 'container'
+      target = run.range
+      element = run.el
+    }
+  }
+
+  held = target
   source = getBlock(studio.content(), target)
   draft.value = source
   shape.value = blockShape(source)
@@ -90,7 +157,9 @@ watch(editing, async (open) => {
   // Markdown that is already there. Testing the real markup against the real
   // source, rather than trusting the block's kind, is what keeps a component,
   // a styled span or a shape the serialiser would flatten out of this path.
-  mode.value = shape.value && canEditVisually(source, element, shape.value) ? 'visual' : 'markdown'
+  mode.value = heldKind === 'container' || (shape.value && canEditVisually(source, element, shape.value))
+    ? 'visual'
+    : 'markdown'
 
   await nextTick()
   if (mode.value === 'visual')
@@ -99,10 +168,74 @@ watch(editing, async (open) => {
     box.value?.focus()
 })
 
+/**
+ * The Markdown a non-text child of a container stands for.
+ *
+ * Looked up by the hint the renderer left on it, so a component inside a slot
+ * survives an edit to the paragraphs around it.
+ */
+function verbatim(child: any): string | null {
+  const at = parseRange((child as HTMLElement).dataset?.studioSrc)
+  return at ? getBlock(studio.content(), at) : null
+}
+
+/**
+ * The run of blocks a block belongs to, when its parent holds nothing else.
+ *
+ * Every child has to be a mapped block and the ranges have to follow one
+ * another, which is what makes the parent a container of text rather than a
+ * piece of layout that happens to have text in it.
+ */
+function containerOf(block: HTMLElement): { el: HTMLElement, range: SourceRange } | null {
+  const parent = block.parentElement
+  if (!parent)
+    return null
+
+  const children = [...parent.children] as HTMLElement[]
+  // One block is enough. Holding the container rather than the block is what
+  // lets Enter make a second block that did not exist before: a slot holding
+  // only a list has to become a slot holding a list and a paragraph, and the
+  // browser can only do that if it owns the box rather than the list.
+  if (!children.length)
+    return null
+
+  const ranges: SourceRange[] = []
+  for (const child of children) {
+    const at = parseRange(child.dataset.studioSrc)
+    if (!at)
+      return null
+    if (ranges.length && at[0] < ranges[ranges.length - 1][1])
+      return null
+    ranges.push(at)
+  }
+
+  return { el: parent, range: [ranges[0][0], ranges[ranges.length - 1][1]] }
+}
+
 /** Reads the `line,line` hint an annotated element carries. */
 function parseRange(raw: string | undefined): SourceRange | null {
   const parts = raw?.split(',').map(Number)
   return parts?.length === 2 && parts.every(Number.isFinite) ? [parts[0], parts[1]] : null
+}
+
+/**
+ * Paste arrives as text, whatever it was copied from.
+ *
+ * A browser pastes the markup it was given: styled spans, classes, font tags,
+ * whole tables. None of that is Markdown, so the serialiser refuses the block
+ * and the edit is thrown away, which is what pasting into a box did before this
+ * existed: the words vanished and nothing said why. Markdown can carry bold,
+ * italic, underline, strike, code and links, and those the toolbar applies. The
+ * rest is not worth losing the paragraph over.
+ */
+function onPaste(event: ClipboardEvent) {
+  const text = event.clipboardData?.getData('text/plain')
+  if (text == null)
+    return
+  event.preventDefault()
+  // Line breaks in a pasted block would each start a new element; the text is
+  // taken as one run and the author can break it where they want it.
+  document.execCommand('insertText', false, text.replace(/\r?\n/g, ' '))
 }
 
 /** Hands the block over to the browser to edit, and remembers how it was. */
@@ -111,11 +244,25 @@ function hold(element: HTMLElement, caretIn?: HTMLElement | null) {
   original = element.innerHTML
   element.setAttribute('contenteditable', 'true')
   element.classList.add('studio-editing')
+  element.addEventListener('paste', onPaste)
   element.spellcheck = false
 
   // Marks as tags rather than inline styles, which is what can be written back
   // as `**` and `*` rather than as a span nobody asked for.
   document.execCommand('styleWithCSS', false, 'false')
+
+  // Enter should start a paragraph, not the `div` browsers reach for by
+  // default, because a paragraph is a block the serialiser recognises.
+  document.execCommand('defaultParagraphSeparator', false, 'p')
+
+  // Anything in the box that is not text is atomic: it can be selected and
+  // deleted whole, which writes it out of the Markdown, but not typed into.
+  if (heldKind === 'container') {
+    for (const child of [...element.children] as HTMLElement[]) {
+      if (!/^(h[1-6]|p|ul|ol|blockquote)$/i.test(child.tagName))
+        child.setAttribute('contenteditable', 'false')
+    }
+  }
 
   // A double click already chose a word; anything else starts at the end.
   const chosen = window.getSelection()
@@ -138,6 +285,7 @@ function release() {
   held = null
   if (!editable)
     return
+  editable.removeEventListener('paste', onPaste)
   editable.removeAttribute('contenteditable')
   editable.classList.remove('studio-editing')
   editable.innerHTML = original
@@ -145,6 +293,16 @@ function release() {
 }
 
 async function apply() {
+  if (heldKind === 'prop') {
+    const key = selection.value?.prop
+    const written = (editable?.textContent ?? '').replace(/\s+/g, ' ').trim()
+    release()
+    editing.value = false
+    if (key && written !== source.trim())
+      await studio.setFrontmatter({ [key]: written }, `Set ${key}`)
+    return
+  }
+
   const target = held ?? range.value
   if (!target || !editing.value)
     return
@@ -157,7 +315,11 @@ async function apply() {
   }
 
   const element = editable
-  const written = element && shape.value ? serialiseBlock(element, shape.value) : null
+  const written = element
+    ? (heldKind === 'container'
+        ? serialiseContainer(element as any, verbatim)
+        : (shape.value ? serialiseBlock(element, shape.value) : null))
+    : null
 
   // Read before releasing: `release` puts the markup back as it was found.
   release()
@@ -181,7 +343,11 @@ function cancel() {
 function toMarkdown() {
   if (mode.value === 'markdown')
     return
-  const written = editable && shape.value ? serialiseBlock(editable, shape.value) : null
+  const written = editable
+    ? (heldKind === 'container'
+        ? serialiseContainer(editable as any, verbatim)
+        : (shape.value ? serialiseBlock(editable, shape.value) : null))
+    : null
   release()
   draft.value = written ?? source
   mode.value = 'markdown'
@@ -221,11 +387,57 @@ function wrapSelection(tag: string) {
   chosen.addRange(after)
 }
 
+/**
+ * A mark, on or off, the way a word processor does it.
+ *
+ * `execCommand` is a toggle in principle, but it decides which way to go by
+ * asking the browser whether the selection is already bold, and after the first
+ * application the selection still refers to the text node the command replaced.
+ * Chromium answers no, bolds what is already bold, and the button appears dead:
+ * the only way back was to leave the block, come in again and reselect. Owning
+ * both directions removes the guesswork, and every tag written here is one the
+ * serialiser already knows how to put back as Markdown.
+ */
+function toggleMark(tag: string, aliases: string[]) {
+  const chosen = window.getSelection()
+  if (!editable || !chosen || chosen.rangeCount === 0 || chosen.isCollapsed)
+    return
+
+  const start = chosen.getRangeAt(0).startContainer
+  const host = (start.nodeType === Node.ELEMENT_NODE ? start : start.parentElement) as HTMLElement | null
+  const existing = host?.closest<HTMLElement>(aliases.join(','))
+
+  if (!existing || !editable.contains(existing)) {
+    wrapSelection(tag)
+    return
+  }
+
+  // Lift the children out rather than replacing the text, so a mark nested
+  // inside this one survives being unwrapped. The nodes are not normalised
+  // afterwards, because the range below is expressed in terms of them.
+  const parent = existing.parentNode
+  if (!parent)
+    return
+  const moved = [...existing.childNodes]
+  for (const node of moved)
+    parent.insertBefore(node, existing)
+  parent.removeChild(existing)
+
+  if (!moved.length)
+    return
+  const after = document.createRange()
+  after.setStartBefore(moved[0])
+  after.setEndAfter(moved[moved.length - 1])
+  chosen.removeAllRanges()
+  chosen.addRange(after)
+}
+
 const marks = [
-  { icon: 'bold', title: 'Bold (Ctrl+B)', markdown: () => format(sel => toggleWrap(sel, '**')), visual: () => document.execCommand('bold') },
-  { icon: 'italic', title: 'Italic (Ctrl+I)', markdown: () => format(sel => toggleWrap(sel, '*')), visual: () => document.execCommand('italic') },
-  { icon: 'code', title: 'Inline code', markdown: () => format(sel => toggleWrap(sel, '`')), visual: () => wrapSelection('code') },
-  { icon: 'strike', title: 'Strikethrough', markdown: () => format(sel => toggleWrap(sel, '~~')), visual: () => document.execCommand('strikeThrough') },
+  { icon: 'bold', title: 'Bold (Ctrl+B)', markdown: () => format(sel => toggleWrap(sel, '**')), visual: () => toggleMark('b', ['b', 'strong']) },
+  { icon: 'italic', title: 'Italic (Ctrl+I)', markdown: () => format(sel => toggleWrap(sel, '*')), visual: () => toggleMark('i', ['i', 'em']) },
+  { icon: 'underline', title: 'Underline (Ctrl+U)', markdown: () => format(sel => toggleTagWrap(sel, '<u>', '</u>')), visual: () => toggleMark('u', ['u']) },
+  { icon: 'code', title: 'Inline code', markdown: () => format(sel => toggleWrap(sel, '`')), visual: () => toggleMark('code', ['code']) },
+  { icon: 'strike', title: 'Strikethrough', markdown: () => format(sel => toggleWrap(sel, '~~')), visual: () => toggleMark('s', ['s', 'del', 'strike']) },
   { icon: 'link', title: 'Link', markdown: () => format(sel => toLink(sel)), visual: () => wrapSelection('a') },
 ]
 
@@ -265,6 +477,10 @@ function onKeydown(event: KeyboardEvent) {
   if (event.key === 'i') {
     event.preventDefault()
     runMark(marks[1])
+  }
+  if (event.key === 'u') {
+    event.preventDefault()
+    runMark(marks[2])
   }
 }
 
@@ -314,7 +530,7 @@ onDomEvent(window, 'resize', () => {
       ? { left: `${rect.left}px`, top: `${Math.max(4, rect.top - 42)}px` }
       : { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px` }"
   >
-    <div class="studio-inline__bar">
+    <div v-if="!editingProp" class="studio-inline__bar">
       <button
         v-for="mark in marks"
         :key="mark.icon"

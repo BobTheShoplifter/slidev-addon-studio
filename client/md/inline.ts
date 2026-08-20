@@ -96,6 +96,10 @@ const MARKS: Record<string, (inner: string, el: InlineElement) => string> = {
   del: inner => `~~${inner}~~`,
   strike: inner => `~~${inner}~~`,
   code: inner => `\`${inner}\``,
+  // Markdown has no underline. It renders inline HTML, so that is what an
+  // underline is written back as, which is also what the deck already had if it
+  // was written by hand.
+  u: inner => `<u>${inner}</u>`,
   a: (inner, el) => `[${inner}](${el.getAttribute('href') ?? ''})`,
   img: (_inner, el) => `![${el.getAttribute('alt') ?? ''}](${el.getAttribute('src') ?? ''})`,
   br: () => '<br>',
@@ -182,10 +186,75 @@ export function serialiseInline(root: { childNodes: Iterable<InlineNode> }): str
  * `perLine` blocks, a list or a quote, have one rendered child per line, so
  * each child is serialised on its own and given the block's marker back.
  */
+/**
+ * A list, however deep it goes.
+ *
+ * The flat version asked the inline serialiser to write a whole `<li>`, and an
+ * item holding a nested list contains a `<ul>`, which is not an inline mark, so
+ * it refused and the block fell back to editing raw Markdown. Splitting each
+ * item into the text it owns and the lists hanging off it lets both be written:
+ * the text through the same inline path as everything else, the sub-lists by
+ * coming back here one level further in.
+ *
+ * Two spaces per level, which is what the template's own decks are written with
+ * and what CommonMark reads back as the same nesting.
+ */
+function serialiseList(root: InlineElement, marker: string, depth: number, base: string): string[] | null {
+  const lines: string[] = []
+  const pad = base + '  '.repeat(depth)
+  // An ordered list is written back numbered from one. Repeating the first
+  // marker renders the same, but it would not match the source it came from,
+  // and the round trip check would refuse to edit the block at all.
+  const ordered = /^\d+[.)]$/.test(marker)
+  let n = Number.parseInt(marker, 10) || 1
+
+  for (const item of root.children) {
+    if (item.tagName.toLowerCase() !== 'li')
+      return null
+
+    const own: InlineNode[] = []
+    const nested: InlineElement[] = []
+    for (const node of item.childNodes) {
+      const tag = (node as InlineElement).tagName?.toLowerCase()
+      if (tag === 'ul' || tag === 'ol')
+        nested.push(node as InlineElement)
+      else
+        own.push(node)
+    }
+
+    const text = serialiseInline({ childNodes: own })
+    if (text === null)
+      return null
+    const bullet = ordered ? `${n++}${marker.slice(-1)}` : marker
+    lines.push(`${pad}${bullet} ${text.trim()}`.trimEnd())
+
+    for (const child of nested) {
+      // A sub-list is written as what it is. Passing the parent's marker down
+      // turned an ordered list nested inside a bulleted one back into bullets.
+      const childMarker = child.tagName.toLowerCase() === 'ol' ? '1.' : '-'
+      const deeper = serialiseList(child, childMarker, depth + 1, base)
+      if (deeper === null)
+        return null
+      lines.push(...deeper)
+    }
+  }
+
+  return lines
+}
+
 export function serialiseBlock(root: InlineElement, shape: BlockShape): string | null {
   if (!shape.perLine) {
     const inner = serialiseInline(root)
     return inner === null ? null : shape.prefix + inner.trim()
+  }
+
+  if (shape.kind === 'list') {
+    // The prefix carries the indentation the block already sits at, which is
+    // not always none: a list nested inside another one is handed over on its
+    // own, and writing it back flush left would pull it out of its parent.
+    const base = shape.prefix.match(/^\s*/)?.[0] ?? ''
+    const nested = serialiseList(root, shape.prefix.trim(), 0, base)
+    return nested && nested.length ? nested.join('\n') : null
   }
 
   const lines: string[] = []
@@ -219,6 +288,90 @@ export function serialiseBlock(root: InlineElement, shape: BlockShape): string |
  * The comparison ignores escaping and runs of whitespace, since writing `2 \* 3`
  * for `2 * 3` is a faithful round trip, not a difference.
  */
+/**
+ * The Markdown block a rendered element stands for, read from the element.
+ *
+ * `blockShape` works the other way round, from source, which is what a single
+ * block needs. A container holds several blocks whose source is not split up
+ * yet, so each child has to say for itself what it is.
+ */
+function shapeOfElement(el: InlineElement): BlockShape | null {
+  const tag = el.tagName.toLowerCase()
+  const heading = tag.match(/^h([1-6])$/)
+  if (heading)
+    return { kind: 'heading', prefix: `${'#'.repeat(Number(heading[1]))} `, perLine: false }
+  if (tag === 'ul')
+    return { kind: 'list', prefix: '- ', perLine: true }
+  if (tag === 'ol')
+    return { kind: 'list', prefix: '1. ', perLine: true }
+  if (tag === 'blockquote')
+    return { kind: 'quote', prefix: '> ', perLine: true }
+  if (tag === 'p')
+    return { kind: 'paragraph', prefix: '', perLine: false }
+  return null
+}
+
+/**
+ * A run of blocks, written back as the Markdown they came from.
+ *
+ * This is what makes a slot behave like a text box rather than like a row of
+ * separate fields. Handing the browser the container means Enter, splitting a
+ * paragraph, leaving a list and selecting across two paragraphs are all things
+ * it already does; all that is needed here is to write the result back, one
+ * block per child, with the blank line between them that keeps them separate.
+ *
+ * Anything the block serialiser does not recognise refuses the whole container,
+ * which is what keeps a component or a shape from being flattened into a
+ * paragraph by an edit that was only meant to fix a typo.
+ */
+export function serialiseContainer(
+  root: InlineElement,
+  /**
+   * The Markdown a child stands for when it is not text at all.
+   *
+   * A slot usually holds a component or two among its paragraphs, and refusing
+   * the whole container for them would mean this almost never applies to a real
+   * slide. They are handed back their own source instead, so they survive an
+   * edit to the text around them, and a child that has been deleted outright is
+   * simply not asked about and disappears from the Markdown, which is what
+   * deleting it should do.
+   */
+  verbatim?: (child: InlineElement) => string | null,
+): string | null {
+  const blocks: string[] = []
+
+  for (const child of root.children) {
+    const shape = shapeOfElement(child)
+
+    if (!shape) {
+      const raw = verbatim?.(child)
+      if (raw == null)
+        return null
+      if (raw.trim())
+        blocks.push(raw.trim())
+      continue
+    }
+
+    const written = serialiseBlock(child, shape)
+    if (written === null)
+      return null
+    if (written.trim())
+      blocks.push(written)
+  }
+
+  return blocks.length ? blocks.join('\n\n') : null
+}
+
+/** Whether a whole container can be handed over and written back unchanged. */
+export function canEditContainer(
+  source: string,
+  root: InlineElement,
+  verbatim?: (child: InlineElement) => string | null,
+): boolean {
+  const written = serialiseContainer(root, verbatim)
+  return written !== null && plain(written) === plain(source)
+}
+
 export function canEditVisually(source: string, root: InlineElement, shape: BlockShape): boolean {
   const written = serialiseBlock(root, shape)
   return written !== null && plain(written) === plain(source)

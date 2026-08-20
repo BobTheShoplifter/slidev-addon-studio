@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockShape, canEditVisually, serialiseBlock, serialiseInline } from '../client/md/inline'
+import { blockShape, canEditContainer, canEditVisually, serialiseBlock, serialiseContainer, serialiseInline } from '../client/md/inline'
 
 /**
  * The serialiser walks a handful of standard node properties, so the tests
@@ -134,5 +134,145 @@ describe('canEditVisually', () => {
     const shape = blockShape('# Ikke bli <span class="red">hacket.</span>')!
     const heading = el('h1', [text('Ikke bli '), el('span', [text('hacket.')], { class: 'red' })])
     expect(canEditVisually('# Ikke bli <span class="red">hacket.</span>', heading, shape)).toBe(false)
+  })
+})
+
+describe('nested lists', () => {
+  const el = (tagName: string, children: any[] = [], text?: string): any => ({
+    nodeType: 1,
+    tagName,
+    textContent: text,
+    childNodes: children,
+    children: children.filter((c: any) => c.nodeType === 1),
+    attributes: [],
+    getAttribute: () => null,
+  })
+  const txt = (textContent: string): any => ({ nodeType: 3, textContent })
+
+  it('writes a sub-list back one level in', () => {
+    const list = el('ul', [
+      el('li', [
+        txt('2000, et viktig veiskille'),
+        el('ul', [
+          el('li', [txt('Notert på Oslo Børs')]),
+          el('li', [txt('Delvis privatisert')]),
+        ]),
+      ]),
+      el('li', [txt('1996-2017')]),
+    ])
+    expect(serialiseBlock(list, { kind: 'list', prefix: '- ', perLine: true })).toBe(
+      '- 2000, et viktig veiskille\n'
+      + '  - Notert på Oslo Børs\n'
+      + '  - Delvis privatisert\n'
+      + '- 1996-2017',
+    )
+  })
+
+  it('keeps the indentation a nested list was found at', () => {
+    const list = el('ul', [el('li', [txt('Notert')]), el('li', [txt('Privatisert')])])
+    expect(serialiseBlock(list, { kind: 'list', prefix: '  - ', perLine: true })).toBe(
+      '  - Notert\n  - Privatisert',
+    )
+  })
+
+  it('still writes a flat list unchanged', () => {
+    const list = el('ul', [el('li', [txt('En')]), el('li', [txt('To')])])
+    expect(serialiseBlock(list, { kind: 'list', prefix: '- ', perLine: true })).toBe('- En\n- To')
+  })
+})
+
+describe('container editing', () => {
+  const el = (tagName: string, children: any[] = []): any => ({
+    nodeType: 1,
+    tagName,
+    childNodes: children,
+    children: children.filter((c: any) => c.nodeType === 1),
+    attributes: [],
+    getAttribute: () => null,
+  })
+  const txt = (textContent: string): any => ({ nodeType: 3, textContent })
+
+  it('writes a run of blocks back with blank lines between them', () => {
+    const box = el('div', [
+      el('h2', [txt('Overskrift')]),
+      el('p', [txt('Et avsnitt.')]),
+      el('ul', [el('li', [txt('En')]), el('li', [txt('To')])]),
+      el('p', [txt('Og et til.')]),
+    ])
+    expect(serialiseContainer(box)).toBe(
+      '## Overskrift\n\nEt avsnitt.\n\n- En\n- To\n\nOg et til.',
+    )
+  })
+
+  it('numbers an ordered list from one', () => {
+    const box = el('div', [el('ol', [el('li', [txt('Først')]), el('li', [txt('Så')])])])
+    expect(serialiseContainer(box)).toBe('1. Først\n2. Så')
+  })
+
+  it('refuses a container holding anything it cannot write back', () => {
+    const box = el('div', [el('p', [txt('Fin')]), el('figure', [txt('?')])])
+    expect(serialiseContainer(box)).toBeNull()
+  })
+
+  it('accepts a container that reproduces its own source', () => {
+    const box = el('div', [el('p', [txt('En setning.')]), el('p', [txt('Og en til.')])])
+    expect(canEditContainer('En setning.\n\nOg en til.', box)).toBe(true)
+  })
+})
+
+describe('containers holding things that are not text', () => {
+  const el = (tagName: string, children: any[] = [], src?: string): any => ({
+    nodeType: 1,
+    tagName,
+    childNodes: children,
+    children: children.filter((c: any) => c.nodeType === 1),
+    attributes: [],
+    getAttribute: () => null,
+    src,
+  })
+  const txt = (textContent: string): any => ({ nodeType: 3, textContent })
+  const verbatim = (child: any) => child.src ?? null
+
+  it('hands a component back its own source', () => {
+    const box = el('div', [
+      el('p', [txt('Før.')]),
+      el('span', [txt('gjengitt')], '<TnPill>Merkelapp</TnPill>'),
+      el('p', [txt('Etter.')]),
+    ])
+    expect(serialiseContainer(box, verbatim)).toBe('Før.\n\n<TnPill>Merkelapp</TnPill>\n\nEtter.')
+  })
+
+  it('drops a component that was deleted from the box', () => {
+    const box = el('div', [el('p', [txt('Bare tekst.')])])
+    expect(serialiseContainer(box, verbatim)).toBe('Bare tekst.')
+  })
+
+  it('still refuses when there is no source to fall back on', () => {
+    const box = el('div', [el('p', [txt('Fin')]), el('figure', [txt('?')])])
+    expect(serialiseContainer(box, verbatim)).toBeNull()
+  })
+})
+
+describe('a sub-list of a different kind', () => {
+  const el = (tagName: string, children: any[] = []): any => ({
+    nodeType: 1,
+    tagName,
+    childNodes: children,
+    children: children.filter((c: any) => c.nodeType === 1),
+    attributes: [],
+    getAttribute: () => null,
+  })
+  const txt = (textContent: string): any => ({ nodeType: 3, textContent })
+
+  it('keeps an ordered list ordered inside a bulleted one', () => {
+    const list = el('ul', [
+      el('li', [
+        txt('Steg'),
+        el('ol', [el('li', [txt('Først')]), el('li', [txt('Så')])]),
+      ]),
+    ])
+    expect(serialiseBlock(list, { kind: 'list', prefix: '- ', perLine: true })).toBe(
+      '- Steg\n  1. Først\n  2. Så',
+    )
   })
 })
