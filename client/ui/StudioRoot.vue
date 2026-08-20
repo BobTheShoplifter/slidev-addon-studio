@@ -3,12 +3,14 @@ import type { StudioContext } from '../context'
 import { useNav } from '@slidev/client'
 import { useWindowSize } from '@vueuse/core'
 import { computed, onScopeDispose, provide, watch, watchEffect } from 'vue'
+import { duplicateBlock, nudgeBlock } from '../actions'
+import { onDomEvent } from '../composables/useDomEvent'
 import { useSelection } from '../composables/useSelection'
 import { useSlideCanvas } from '../composables/useSlideCanvas'
 import { useSlideSource } from '../composables/useSlideSource'
 import { useTransformGizmo } from '../composables/useTransformGizmo'
 import { studioContext, studioKey } from '../context'
-import { dockWidth, lastError, selection, studioOpen } from '../state'
+import { dockWidth, editing, lastError, selection, studioOpen } from '../state'
 import InlineEditor from './InlineEditor.vue'
 import SelectionLayer from './SelectionLayer.vue'
 import StudioDock from './StudioDock.vue'
@@ -77,6 +79,57 @@ provide(studioKey, context)
 // is built there and has no way to inject.
 studioContext.value = context
 onScopeDispose(() => (studioContext.value = null))
+
+/*
+ * The keys a canvas is expected to answer to.
+ *
+ * Slidev owns the arrows for navigation and Studio has no business taking them
+ * from a deck being presented. It takes them only when it has a positioned
+ * block selected and nobody is typing, which is the one case where an arrow
+ * plainly means "move this a bit", and hands them straight back otherwise.
+ *
+ * A tenth of the grid on its own, the whole step with Shift, matching what the
+ * gizmo snaps to.
+ */
+const NUDGE = 1
+const NUDGE_FAR = 10
+
+onDomEvent<KeyboardEvent>(document, 'keydown', (event) => {
+  if (!studioOpen.value || editing.value)
+    return
+  const target = selection.value
+  if (!target?.range)
+    return
+  // A key pressed in a panel field belongs to that field.
+  if (event.target instanceof Element && event.target.closest('input, textarea, [contenteditable="true"]'))
+    return
+
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd') {
+    event.preventDefault()
+    duplicateBlock(context, target)
+    return
+  }
+
+  const step = event.shiftKey ? NUDGE_FAR : NUDGE
+  const by: Record<string, [number, number]> = {
+    ArrowLeft: [-step, 0],
+    ArrowRight: [step, 0],
+    ArrowUp: [0, -step],
+    ArrowDown: [0, step],
+  }
+  const delta = by[event.key]
+  if (!delta || event.metaKey || event.ctrlKey || event.altKey)
+    return
+
+  // Decided here and not after the write: `preventDefault` has to happen while
+  // the event is still being dispatched, and by the time an await came back
+  // Slidev would already have changed slide.
+  if (!target.positioned)
+    return
+
+  event.preventDefault()
+  nudgeBlock(context, target, delta[0], delta[1])
+}, { capture: true })
 
 // Selection belongs to one slide; navigating away drops it.
 watch(no, () => (selection.value = null))

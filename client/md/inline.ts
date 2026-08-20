@@ -209,7 +209,21 @@ function serialiseList(root: InlineElement, marker: string, depth: number, base:
   let n = Number.parseInt(marker, 10) || 1
 
   for (const item of root.children) {
-    if (item.tagName.toLowerCase() !== 'li')
+    const tag = item.tagName.toLowerCase()
+
+    // A browser indents an item by putting the sub-list beside it rather than
+    // inside it, which is what `execCommand('indent')` produces and what Tab
+    // therefore builds. It means the same thing, one level in, and refusing it
+    // meant the whole edit was thrown away the moment anyone pressed Tab.
+    if (tag === 'ul' || tag === 'ol') {
+      const beside = serialiseList(item, tag === 'ol' ? '1.' : '-', depth + 1, base)
+      if (beside === null)
+        return null
+      lines.push(...beside)
+      continue
+    }
+
+    if (tag !== 'li')
       return null
 
     const own: InlineNode[] = []

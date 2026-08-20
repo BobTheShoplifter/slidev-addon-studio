@@ -212,6 +212,23 @@ function containerOf(block: HTMLElement): { el: HTMLElement, range: SourceRange 
   return { el: parent, range: [ranges[0][0], ranges[ranges.length - 1][1]] }
 }
 
+/**
+ * Whether the caret is in a list item of the box being edited.
+ *
+ * Asked of the DOM rather than of the block's shape, because a text box holding
+ * a paragraph and a list has the shape of neither: what matters is where the
+ * caret is now.
+ */
+function inListItem(): boolean {
+  const chosen = window.getSelection()
+  if (!editable || !chosen || chosen.rangeCount === 0)
+    return false
+  const node = chosen.getRangeAt(0).startContainer
+  const host = (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement) as HTMLElement | null
+  const item = host?.closest('li')
+  return !!item && editable.contains(item)
+}
+
 /** Reads the `line,line` hint an annotated element carries. */
 function parseRange(raw: string | undefined): SourceRange | null {
   const parts = raw?.split(',').map(Number)
@@ -460,7 +477,11 @@ function onKeydown(event: KeyboardEvent) {
   const modifier = event.metaKey || event.ctrlKey
   if (event.key === 'Escape') {
     event.preventDefault()
-    cancel()
+    // Committed, not thrown away. Escape in a word processor means "I am done
+    // with this box", and undo is how you take an edit back. Discarding a whole
+    // typing session on one keystroke, with no warning and nothing on the undo
+    // stack, is the one way this editor could lose work outright.
+    apply()
     return
   }
   if (modifier && event.key === 'Enter') {
@@ -468,6 +489,21 @@ function onKeydown(event: KeyboardEvent) {
     apply()
     return
   }
+  /*
+   * Tab moves a list item in and out a level.
+   *
+   * It is the one key a list is expected to answer to beyond Enter, and it went
+   * to the browser instead: focus left the box entirely and landed on Slidev's
+   * navbar. `indent` and `outdent` are the two commands browsers still
+   * implement well for lists in a contenteditable, and what they build is a
+   * nested list, which the serialiser now writes back as indentation.
+   */
+  if (!modifier && event.key === 'Tab' && inListItem()) {
+    event.preventDefault()
+    document.execCommand(event.shiftKey ? 'outdent' : 'indent')
+    return
+  }
+
   if (!modifier)
     return
   if (event.key === 'b') {

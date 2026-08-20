@@ -276,3 +276,27 @@ describe('a sub-list of a different kind', () => {
     )
   })
 })
+
+describe('the nesting a browser builds', () => {
+  const el = (tagName: string, children: any[] = []): any => ({
+    nodeType: 1,
+    tagName,
+    childNodes: children,
+    children: children.filter((c: any) => c.nodeType === 1),
+    attributes: [],
+    getAttribute: () => null,
+  })
+  const txt = (textContent: string): any => ({ nodeType: 3, textContent })
+
+  it('reads a sub-list placed beside its item, not inside it', () => {
+    // What execCommand('indent') leaves behind when Tab demotes an item.
+    const list = el('ul', [
+      el('li', [txt('En')]),
+      el('ul', [el('li', [txt('Under')])]),
+      el('li', [txt('To')]),
+    ])
+    expect(serialiseBlock(list, { kind: 'list', prefix: '- ', perLine: true })).toBe(
+      '- En\n  - Under\n- To',
+    )
+  })
+})

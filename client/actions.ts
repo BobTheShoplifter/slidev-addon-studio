@@ -122,6 +122,41 @@ export async function deleteBlock(studio: StudioContext, target: StudioTarget) {
   await studio.commit(removeBlock(studio.content(), unit), `Delete ${target.label}`)
 }
 
+/**
+ * Moves a positioned block by a few pixels, from the keyboard.
+ *
+ * A block still in the flow has no position to change: where it sits is decided
+ * by the text around it, and an arrow key there means the deck's own navigation,
+ * which is what it keeps doing. Only a block that has been given a position of
+ * its own can be nudged, which is also the only one where a pixel means
+ * anything.
+ */
+export async function nudgeBlock(
+  studio: StudioContext,
+  target: StudioTarget,
+  dx: number,
+  dy: number,
+): Promise<boolean> {
+  if (!target.range)
+    return false
+
+  const content = studio.content()
+  const unit = positionedUnit(content, target.range)
+  const drag = readDrag(content, unit)
+  if (!drag?.pos)
+    return false
+
+  const pos = drag.pos
+  await studio.commit(
+    writeDrag(content, unit, { ...pos, x: pos.x + dx, y: pos.y + dy }),
+    'Nudge element',
+    // The numbers change, nothing else does, and rebuilding the slide for an
+    // arrow key would make holding one down unusable.
+    { keepSelection: true },
+  )
+  return true
+}
+
 export async function moveBlockBy(studio: StudioContext, target: StudioTarget, direction: -1 | 1) {
   if (!target.range)
     return
