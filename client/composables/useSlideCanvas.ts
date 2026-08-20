@@ -83,7 +83,38 @@ export function useSlideCanvas(zoom: () => number = () => 1) {
     }
   }
 
-  return { el, rect, scale, slideWidth, slideHeight, toCanvas, toScreen, boxOf }
+
+  /**
+   * Where an element's positioning context starts, in slide coordinates.
+   *
+   * A free position is written as `pos`, and Slidev places that box absolutely.
+   * Absolute means "against the nearest positioned ancestor", which is the slide
+   * only when nothing in between positions itself. A layout that positions its
+   * own panes is such an in-between, so a block inside one, written at the point
+   * it was dropped, appeared somewhere else entirely: off by exactly the pane's
+   * offset, which is what looked like the block teleporting back.
+   *
+   * Everything else in the editor works in slide coordinates. This is the one
+   * conversion, applied where a box becomes a `pos`.
+   */
+  function originOf(target: Element) {
+    const parent = (target as HTMLElement).offsetParent as HTMLElement | null
+    const root = el.value
+    if (!parent || !root || parent === root || !root.contains(parent))
+      return { x: 0, y: 0 }
+
+    const box = parent.getBoundingClientRect()
+    // Absolute positioning is measured from the padding box, inside the border.
+    const style = getComputedStyle(parent)
+    const left = box.left + (Number.parseFloat(style.borderLeftWidth) || 0)
+    const top = box.top + (Number.parseFloat(style.borderTopWidth) || 0)
+    return {
+      x: (left - rect.value.left) / scale.value,
+      y: (top - rect.value.top) / scale.value,
+    }
+  }
+
+  return { el, rect, scale, slideWidth, slideHeight, toCanvas, toScreen, boxOf, originOf }
 }
 
 /**

@@ -261,9 +261,19 @@ export function useTransformGizmo(context: {
     // Only when the wrapper does not exist yet does the written box need to
     // grow by the padding it will add.
     const pad = padding
+    // The gesture is measured in slide coordinates because that is what the
+    // overlay, the guides and the clamping all work in. What is written has to
+    // be in the coordinates the block is actually positioned against, which is
+    // its own containing block whenever a layout positions the panes it sits in.
+    // Measured from whatever will carry the position. Once a block has one it
+    // sits inside a `v-drag` wrapper, and the wrapper is then the block's own
+    // offset parent, so asking the block would have subtracted the wrapper's
+    // current position instead of the pane's origin, and every drag would move
+    // the block by the pane's offset on top of the distance dragged.
+    const origin = context.canvas.originOf(painted ?? target.el)
     const pos: DragPos = {
-      x: box.x - pad,
-      y: box.y - pad,
+      x: box.x - pad - origin.x,
+      y: box.y - pad - origin.y,
       w: box.w + pad * 2,
       // A resize that touched a vertical edge fixes the height; otherwise the
       // element keeps sizing itself, which is what authors usually want.
@@ -365,8 +375,16 @@ export function useTransformGizmo(context: {
 
     if (!painted)
       return
-    painted.style.left = `${box.x}px`
-    painted.style.top = `${box.y}px`
+
+    // The box is in slide coordinates, which is what the gesture, the guides
+    // and the snapping all work in. What is painted has to be in the
+    // coordinates the element is actually positioned against. Inside a layout
+    // that positions its own panes those differ, and painting the slide figure
+    // put the block a pane's width to the left of the pointer, where it stayed
+    // until a reload rendered it from the Markdown at the place it really was.
+    const origin = canvas.originOf(painted)
+    painted.style.left = `${box.x - origin.x}px`
+    painted.style.top = `${box.y - origin.y}px`
     painted.style.width = `${box.w}px`
     if (!autoHeight)
       painted.style.height = `${box.h}px`
