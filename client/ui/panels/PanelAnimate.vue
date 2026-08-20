@@ -23,6 +23,13 @@ const total = computed(() => clicks.value.total)
 const current = computed(() => clicks.value.current)
 
 const range = computed(() => selection.value?.range ?? null)
+
+/** Every stop on this slide, the slide's own state included. */
+const steps = computed(() => {
+  const from = clicks.value.clicksStart
+  const to = Math.max(total.value, from)
+  return Array.from({ length: to - from + 1 }, (_, i) => from + i)
+})
 const state = ref<ClickState>({ ...EMPTY_CLICKS })
 const motion = ref<string | null>(null)
 const motionDelay = ref(0)
@@ -81,17 +88,31 @@ const TRANSITIONS = ['', 'fade', 'fade-out', 'slide-left', 'slide-right', 'slide
     <h3 class="studio-section__title">
       Click sequence
     </h3>
-    <p class="studio-hint" style="margin-bottom: 8px">
-      Step {{ current }} of {{ total }} on this slide
+
+    <!--
+      The steps themselves, rather than a slider over them. A slider says how
+      far along you are; what an author wants to know is how many steps the
+      slide has, which one they are on, and how to get to any of the others,
+      and a dozen numbered stops answers all three at a glance.
+    -->
+    <div class="studio-steps" role="group" aria-label="Click sequence">
+      <button
+        v-for="step in steps"
+        :key="step"
+        class="studio-step"
+        :class="{ 'is-current': step === current, 'is-done': step < current }"
+        :title="step === clicks.clicksStart ? 'With the slide' : `Step ${step}`"
+        @click="scrub(step)"
+      >
+        {{ step === clicks.clicksStart ? '0' : step }}
+      </button>
+    </div>
+
+    <p class="studio-hint">
+      {{ total > clicks.clicksStart
+        ? `Step ${current} of ${total}. Click a number to jump there.`
+        : 'Nothing on this slide waits for a click yet.' }}
     </p>
-    <input
-      type="range"
-      :min="clicks.clicksStart"
-      :max="Math.max(total, clicks.clicksStart)"
-      :value="current"
-      style="width: 100%"
-      @input="scrub(+($event.target as HTMLInputElement).value)"
-    >
   </section>
 
   <div v-if="!selection || !range" class="studio-empty">
@@ -199,3 +220,49 @@ const TRANSITIONS = ['', 'fade', 'fade-out', 'slide-left', 'slide-right', 'slide
     </StudioField>
   </section>
 </template>
+
+<style scoped>
+.studio-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+/*
+ * Sized to the digits it holds so a deck with a dozen steps still lines up,
+ * and square-ish rather than round: a step is a position in a sequence, not a
+ * bullet.
+ */
+.studio-step {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.studio-step:hover { opacity: 1; }
+
+/* Already passed, so it reads as behind you rather than as unavailable. */
+.studio-step.is-done {
+  opacity: 0.85;
+  border-color: var(--studio-accent);
+  background: var(--studio-accent-soft);
+}
+
+.studio-step.is-current {
+  opacity: 1;
+  background: var(--studio-accent);
+  border-color: var(--studio-accent);
+  color: #fff;
+}
+</style>
