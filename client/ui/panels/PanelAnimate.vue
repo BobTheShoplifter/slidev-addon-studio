@@ -5,7 +5,7 @@ import { computed, ref, watch } from 'vue'
 import { useStudio } from '../../context'
 import { CLICK_ANIMATIONS, EMPTY_CLICKS, readClicks, writeClicks } from '../../md/clicks'
 import { MOTION_PRESETS, readMotion, writeMotion } from '../../md/motion'
-import { selection } from '../../state'
+import { reportError, selection } from '../../state'
 import StudioField from '../parts/StudioField.vue'
 
 /**
@@ -53,8 +53,34 @@ const canMotion = computed(() => !!selection.value?.tag)
 async function apply(patch: Partial<ClickState>) {
   if (!range.value)
     return
+
+  /*
+   * A reveal asked for on one item of a list is applied to the list.
+   *
+   * The reveal is written as a `<v-click>` wrapper around the block's lines,
+   * and around one item that splices an HTML block into the middle of the list:
+   * it ends above and starts again below, so one list becomes three and an
+   * ordered list restarts its numbering halfway down.
+   *
+   * Refusing would be a dead end, because the items fill the list and a click
+   * on one always lands on the item rather than on the list. What the author
+   * means is the thing Slidev writes as `<v-clicks>`: the list revealing its
+   * items one at a time. That is what this does, and it says so.
+   */
+  let target = range.value
+  if (selection.value?.kind === 'list-item') {
+    const list = selection.value.el.closest<HTMLElement>('[data-studio-kind="list"]')
+    const at = list?.dataset.studioSrc?.split(',').map(Number)
+    if (!at || at.length !== 2 || !at.every(Number.isFinite)) {
+      reportError(new Error('That item is in a list Studio cannot trace, so it cannot be revealed on a click.'))
+      return
+    }
+    target = [at[0], at[1]]
+    patch = { ...patch, stagger: true }
+  }
+
   const next: ClickState = { ...state.value, ...patch, via: patch.via ?? (state.value.via === 'none' ? 'attr' : state.value.via) }
-  await studio.commit(writeClicks(studio.content(), range.value, next), 'Set animation')
+  await studio.commit(writeClicks(studio.content(), target, next), 'Set animation')
 }
 
 async function disable() {
