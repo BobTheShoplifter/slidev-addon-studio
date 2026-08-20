@@ -63,7 +63,10 @@ export function useSelection(
     if (node.closest('.monaco-editor, .slidev-monaco-container'))
       return null
 
-    const el = node.closest<HTMLElement>('[data-studio-src]')
+    // Whichever is nearer: a block of Markdown, or a string a layout was handed.
+    // Nesting decides, because a labelled string can sit inside a mapped block
+    // and the inner one is what was aimed at.
+    const el = node.closest<HTMLElement>('[data-studio-src], [data-studio-prop]')
     if (!el || !belongsToSlide(el, no()))
       return null
 
@@ -220,7 +223,7 @@ export function useSelection(
     // container.
     if (event.target instanceof Element && event.target.closest('.studio-move')) {
       const beneath = throughChrome(event.clientX, event.clientY) ?? selection.value
-      if (!beneath?.range)
+      if (!beneath?.range && !beneath?.prop)
         return
       event.preventDefault()
       selection.value = beneath
@@ -232,7 +235,7 @@ export function useSelection(
       return
 
     const target = targetFrom(event.target) ?? targetFromPoint(event.clientX, event.clientY)
-    if (!target?.range)
+    if (!target?.range && !target?.prop)
       return
     event.preventDefault()
     selection.value = target
@@ -438,6 +441,20 @@ function isTyping(target: EventTarget | null) {
 }
 
 function describe(el: HTMLElement, no: number, content: string): StudioTarget {
+  const prop = el.dataset.studioProp
+  if (prop) {
+    return {
+      el,
+      no,
+      range: null,
+      kind: 'frontmatter',
+      prop,
+      positioned: false,
+      nested: false,
+      label: prop,
+    }
+  }
+
   const kind = (el.dataset.studioKind ?? 'unknown') as TargetKind
   const tag = el.dataset.studioTag
   const hint = parseHint(el.dataset.studioSrc)

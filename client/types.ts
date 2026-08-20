@@ -12,6 +12,7 @@ export type TargetKind =
   | 'html'
   | 'component'
   | 'code'
+  | 'frontmatter'
   | 'unknown'
 
 export interface StudioTarget {
@@ -24,6 +25,12 @@ export interface StudioTarget {
   kind: TargetKind
   /** Tag name for html/component targets. */
   tag?: string
+  /**
+   * The frontmatter key this element renders, for text a layout was given
+   * rather than text the slide holds. Such an element has no `range`: its words
+   * live in the slide's frontmatter, and that is where an edit is written.
+   */
+  prop?: string
   /** True when the block is wrapped in, or carries, a `v-drag` position. */
   positioned: boolean
   /**

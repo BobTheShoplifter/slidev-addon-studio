@@ -274,6 +274,25 @@ hardcoded in the editor. When the files are images, the inspector shows a
 picker of the images themselves. `playground/components/Shape.vue` is a working
 example of exactly that.
 
+## Text a layout renders
+
+A layout is handed some of its words as frontmatter: a `title`, an `eyebrow`, a
+speaker's `name`. Those words are not in the slide's body, so there is no line
+of Markdown behind them and Studio cannot find them the way it finds a
+paragraph. Mark them and it can:
+
+```vue
+<h1 data-studio-prop="title">{{ title }}</h1>
+```
+
+The element is then selectable on the canvas and editable in place, and what is
+typed is written back to that frontmatter key. A value is a plain string, so the
+formatting controls are not offered on one, and it opens with the whole value
+selected the way a title placeholder does.
+
+Keys holding a list rather than a string, such as an agenda's `items`, stay in
+the Layout panel, where they are edited as rows.
+
 ## Configuration
 
 All optional, under `studio` in the headmatter:

@@ -20,7 +20,10 @@ export function slideElement(no: number): HTMLElement | null {
 /** Every block on that slide the editor can map back to source. */
 export function mappedElements(no: number): HTMLElement[] {
   const root = slideElement(no)
-  return root ? [...root.querySelectorAll<HTMLElement>('[data-studio-src]')] : []
+  // `data-studio-prop` is how a theme says "these words are a frontmatter key".
+  // Such an element has no line range, so it would never be found by the first
+  // selector, and text rendered from a layout's props could not be clicked.
+  return root ? [...root.querySelectorAll<HTMLElement>('[data-studio-src], [data-studio-prop]')] : []
 }
 
 /** Whether a node belongs to the slide currently being edited. */

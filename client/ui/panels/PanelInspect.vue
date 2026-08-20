@@ -7,7 +7,7 @@ import { readProp, writeProp } from '../../md/props'
 import { readDrag, writeDrag } from '../../md/drag'
 import { getBlock, replaceBlock } from '../../md/lines'
 import { canStyle, readClasses, writeClasses } from '../../md/classes'
-import { deleteBlock, duplicateBlock, freePosition, moveBlockBy, returnToFlow } from '../../actions'
+import { canReorder, deleteBlock, duplicateBlock, freePosition, moveBlockBy, returnToFlow } from '../../actions'
 import { missed, selection } from '../../state'
 import PropField from '../parts/PropField.vue'
 import StudioField from '../parts/StudioField.vue'
@@ -138,6 +138,16 @@ async function remove() {
     </template>
   </div>
 
+  <div v-else-if="selection?.prop" class="studio-empty">
+    <p>
+      These words are the slide's <code>{{ selection.prop }}</code>.
+    </p>
+    <p class="studio-hint">
+      Double click to rewrite them here, or open the Layout panel to change them
+      along with the rest of the slide's settings.
+    </p>
+  </div>
+
   <div v-else-if="!range" class="studio-empty">
     <p>This element could not be traced back to the Markdown.</p>
     <p class="studio-hint">
@@ -236,20 +246,20 @@ async function remove() {
         Arrange
       </h3>
       <div class="studio-button-row">
-        <button class="studio-button" title="Move earlier" :disabled="selection.nested" @click="move(-1)">
+        <button class="studio-button" title="Move earlier" :disabled="!canReorder(selection)" @click="move(-1)">
           <StudioIcon name="up" :size="14" />
         </button>
-        <button class="studio-button" title="Move later" :disabled="selection.nested" @click="move(1)">
+        <button class="studio-button" title="Move later" :disabled="!canReorder(selection)" @click="move(1)">
           <StudioIcon name="down" :size="14" />
         </button>
-        <button class="studio-button" title="Duplicate" :disabled="selection.nested" @click="duplicate">
+        <button class="studio-button" title="Duplicate" :disabled="!canReorder(selection)" @click="duplicate">
           <StudioIcon name="copy" :size="14" />
         </button>
         <button class="studio-button studio-button--danger" title="Delete" @click="remove">
           <StudioIcon name="trash" :size="14" />
         </button>
       </div>
-      <p v-if="selection.nested" class="studio-hint">
+      <p v-if="!canReorder(selection)" class="studio-hint">
         This element shares a block with its neighbours, so it can be edited and
         deleted but not reordered on its own.
       </p>
