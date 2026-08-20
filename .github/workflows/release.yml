@@ -7,7 +7,11 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: read
+  # Enough to cut the GitHub release below. The tag alone is a commit that
+  # happens to have a name on it: nothing tells a reader what changed, and
+  # nothing appears in the repository's Releases, in a watcher's feed, or in the
+  # dependency tools that read release notes.
+  contents: write
   # npm's trusted publishing: the registry checks a short lived token from
   # GitHub that names this repository and this workflow, so there is no npm
   # token to store, leak or rotate. Provenance is attached automatically, which
@@ -84,3 +88,18 @@ jobs:
       # reports a refused identity as "need auth", which reads the same as
       # never having tried.
       - run: npm publish --loglevel http
+
+      # Only once the package is actually on the registry. A release published
+      # ahead of it would announce a version nobody could install yet, and a
+      # failed publish would leave that announcement standing.
+      - name: Cut the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GitHub works out the range itself, from the previous release. No
+          # `git describe` here on purpose: the checkout is shallow and would
+          # not see the tag before this one.
+          gh release create "$GITHUB_REF_NAME" \
+            --title "${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            --verify-tag
