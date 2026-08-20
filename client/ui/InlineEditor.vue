@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { BlockShape } from '../md/inline'
+import type { SourceRange } from '../types'
 import { computed, nextTick, ref, watch } from 'vue'
 import { blockShape, canEditVisually, serialiseBlock } from '../md/inline'
 import { toggleBullet, toggleHeading, toggleQuote, toggleWrap, toLink } from '../md/format'
@@ -39,6 +40,15 @@ let editable: HTMLElement | null = null
 let original = ''
 let source = ''
 
+/*
+ * The lines the open editor owns.
+ *
+ * Usually the selection's own range, but not when a list item hands over the
+ * whole list: what is written back then covers every item, so writing it over
+ * the one item's range would leave the rest of the list standing underneath.
+ */
+let held: SourceRange | null = null
+
 const range = computed(() => selection.value?.range ?? null)
 
 watch(editing, async (open) => {
@@ -47,10 +57,27 @@ watch(editing, async (open) => {
     return
   }
 
-  const target = range.value
-  const element = selection.value?.el
+  // Editing an item of a list hands over the whole list.
+  //
+  // A list is written the way anyone writes one: type an item, press Enter,
+  // type the next. The browser does that for nothing, but only when the thing
+  // it is editing is the list rather than one item of it. Studio maps each item
+  // to its own line so it can be moved and deleted on its own, and holding one
+  // item made the most ordinary act on a list impossible.
+  //
+  // Both are mapped, so the list's own range is already known and everything
+  // typed is written back through the same serialiser, one line per item.
+  const picked = selection.value?.el
+  const list = picked?.dataset.studioKind === 'list-item'
+    ? picked.closest<HTMLElement>('[data-studio-kind="list"]')
+    : null
+  const listRange = list ? parseRange(list.dataset.studioSrc) : null
+
+  const target = listRange ?? range.value
+  const element = (listRange && list) || picked
   if (!target || !element)
     return
+  held = target
 
   source = getBlock(studio.content(), target)
   draft.value = source
@@ -67,13 +94,19 @@ watch(editing, async (open) => {
 
   await nextTick()
   if (mode.value === 'visual')
-    hold(element)
+    hold(element, element === picked ? undefined : picked)
   else
     box.value?.focus()
 })
 
+/** Reads the `line,line` hint an annotated element carries. */
+function parseRange(raw: string | undefined): SourceRange | null {
+  const parts = raw?.split(',').map(Number)
+  return parts?.length === 2 && parts.every(Number.isFinite) ? [parts[0], parts[1]] : null
+}
+
 /** Hands the block over to the browser to edit, and remembers how it was. */
-function hold(element: HTMLElement) {
+function hold(element: HTMLElement, caretIn?: HTMLElement | null) {
   editable = element
   original = element.innerHTML
   element.setAttribute('contenteditable', 'true')
@@ -88,10 +121,21 @@ function hold(element: HTMLElement) {
   const chosen = window.getSelection()
   if (!chosen || !element.contains(chosen.anchorNode))
     element.focus()
+
+  // When the list was handed over on behalf of one of its items, the caret
+  // belongs in that item rather than wherever the list happens to start.
+  if (caretIn && element.contains(caretIn) && chosen) {
+    const at = document.createRange()
+    at.selectNodeContents(caretIn)
+    at.collapse(false)
+    chosen.removeAllRanges()
+    chosen.addRange(at)
+  }
 }
 
 /** Gives the block back to the renderer, exactly as it was found. */
 function release() {
+  held = null
   if (!editable)
     return
   editable.removeAttribute('contenteditable')
@@ -101,7 +145,7 @@ function release() {
 }
 
 async function apply() {
-  const target = range.value
+  const target = held ?? range.value
   if (!target || !editing.value)
     return
 
