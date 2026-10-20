@@ -950,3 +950,14 @@ html.slidev-studio-docked #page-root {
   transform-origin: 0 0;
   transition: transform 0.15s ease;
 }
+
+/* The text style picker in the inline toolbar: one control among the icons. */
+.slidev-studio .studio-inline__style {
+  width: auto;
+  max-width: 140px;
+  height: 24px;
+  margin: 0 2px;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 22px;
+}

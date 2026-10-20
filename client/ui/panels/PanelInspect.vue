@@ -24,7 +24,7 @@ const { components } = useCatalog()
 const range = computed(() => selection.value?.range ?? null)
 
 /** Whether this block can carry a class at all, in Markdown or as an attribute. */
-const styleable = computed(() => !!range.value && canStyle(studio.content(), range.value, !!configs.mdc))
+const styleable = computed(() => !!range.value && canStyle(studio.content(), range.value, !!(configs.comark ?? configs.mdc)))
 
 /**
  * The catalog entry behind the selected tag, if it is a component. That is
@@ -231,8 +231,8 @@ async function remove() {
       <StudioField v-if="styleable" label="Classes">
         <input v-model="classes" type="text" placeholder="text-xl opacity-80" @change="applyClasses">
       </StudioField>
-      <p v-if="!selection.tag && !configs.mdc" class="studio-hint">
-        Classes on Markdown blocks need <code>mdc: true</code> in the headmatter.
+      <p v-if="!selection.tag && !(configs.comark ?? configs.mdc)" class="studio-hint">
+        Classes on Markdown blocks need <code>comark: true</code> in the headmatter.
       </p>
       <p v-else-if="!styleable" class="studio-hint">
         This block cannot carry a class of its own. A trailing

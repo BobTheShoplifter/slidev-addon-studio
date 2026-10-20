@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { clearClicks, findWrapper, readClicks, writeClicks } from '../client/md/clicks'
 import { canStyle, readClasses, writeClasses } from '../client/md/classes'
 import { formatPos, parsePos, readDrag, removeDrag, writeDrag } from '../client/md/drag'
-import { toggleBullet, toggleHeading, toggleQuote, toggleWrap, toLink } from '../client/md/format'
+import { setStyle, styleAt, toggleBullet, toggleHeading, toggleQuote, toggleWrap, toLink } from '../client/md/format'
 import { formatValue, patchFrontmatterRaw } from '../client/md/frontmatter'
 import { readMotion, writeMotion } from '../client/md/motion'
 import { resize } from '../client/composables/useTransformGizmo'
@@ -673,5 +673,36 @@ describe('positioned blocks', () => {
     expect(next[0]).toBe('# Title')
     expect(next[2]).toBe('Body text.')
     expect(next.slice(4, 9)).toEqual(['<v-drag pos="490,20,352,118">', '', '![shot](/a.png)', '', '</v-drag>'])
+  })
+})
+
+describe('text styles', () => {
+  const at = (text: string, start: number, end = start): { text: string, start: number, end: number } => ({ text, start, end })
+
+  it('reads the style around a selection', () => {
+    const text = 'Build [presentations]{.accent} faster.'
+    expect(styleAt(at(text, 7, 20))).toBe('accent')
+    expect(styleAt(at(text, 6, 30))).toBe('accent')
+    expect(styleAt(at(text, 10))).toBe('accent')
+    expect(styleAt(at(text, 0, 5))).toBeNull()
+    expect(styleAt(at('a [link](https://x.y) here', 3, 7))).toBeNull()
+  })
+
+  it('wraps a selection in a style', () => {
+    expect(setStyle(at('Build presentations faster.', 6, 19), 'accent'))
+      .toEqual({ text: 'Build [presentations]{.accent} faster.', start: 7, end: 20 })
+  })
+
+  it('swaps the style the selection already has', () => {
+    const text = 'Build [presentations]{.accent} faster.'
+    expect(setStyle(at(text, 7, 20), 'muted').text).toBe('Build [presentations]{.muted} faster.')
+    expect(setStyle(at(text, 6, 30), 'muted').text).toBe('Build [presentations]{.muted} faster.')
+    // A partial selection inside the word still means the whole word.
+    expect(setStyle(at(text, 10, 14), 'muted').text).toBe('Build [presentations]{.muted} faster.')
+  })
+
+  it('takes a style off', () => {
+    expect(setStyle(at('Build [presentations]{.accent} faster.', 7, 20), ''))
+      .toEqual({ text: 'Build presentations faster.', start: 6, end: 19 })
   })
 })
