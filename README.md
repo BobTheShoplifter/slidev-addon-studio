@@ -92,6 +92,37 @@ directives and formatting, and a Slidev deck is full of all three.
 <kbd>Ctrl</kbd> + <kbd>B</kbd> and <kbd>Ctrl</kbd> + <kbd>I</kbd> do what you
 expect.
 
+### Text styles
+
+A deck usually has a few ways of setting a word apart: the brand colour, a
+muted aside, a highlight. The toolbar lists them in a dropdown, shows which one
+the selection already has, and writes the choice as Comark's `[word]{.accent}`,
+which is what the author would have typed.
+
+![A paragraph being edited in place; the word "presentations" is selected and the toolbar's style dropdown shows "Accent"](./docs/text-styles.png)
+
+The list is read from the deck's own CSS. A theme, an addon or the deck itself
+declares its text styles by putting them in a cascade layer called
+`slidev-text`, wherever its stylesheets happen to live:
+
+```css
+@layer slidev-text {
+  .accent { color: var(--brand-red); }
+  .quiet { --label: "Muted"; color: #8a8a90; }
+}
+```
+
+Every class in that layer is a style; nothing outside it is, so a layout helper
+or a utility class never shows up as something to give a word. Blocks with the
+same layer name merge, so a deck can add to what its theme declares, and a
+nested layer such as `slidev-text.emphasis` groups the styles in it. A `--label`
+names a style for the dropdown; without one the class name is used. The colour
+each style paints is read from the page, so a swatch follows the theme.
+
+A word carrying a class the layer does not declare shows as "Custom class" and
+is left alone. Styles need `comark: true` in the headmatter, since that is the
+syntax they are written in.
+
 ### Editing props
 
 Select a component and the Element panel becomes a form for it, built from the

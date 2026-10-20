@@ -115,6 +115,21 @@ function isPlain(el: InlineElement): boolean {
   return [...el.attributes].every(attr => OURS.test(attr.name))
 }
 
+/**
+ * The classes of a span that carries nothing but classes, or `null`.
+ *
+ * That is what Comark's `[word]{.accent}` renders as, so it is the one styled
+ * element with a Markdown form to write back. A span with any other attribute
+ * is markup the author wrote by hand, and is refused as before.
+ */
+function styledSpan(el: InlineElement): string[] | null {
+  const own = [...el.attributes].filter(attr => !OURS.test(attr.name))
+  if (own.length !== 1 || own[0].name !== 'class')
+    return null
+  const classes = (el.getAttribute('class') ?? '').trim().split(/\s+/).filter(Boolean)
+  return classes.length ? classes : null
+}
+
 /** Characters that would otherwise start a construct where they stand. */
 function escapeText(text: string): string {
   return text.replace(/([\\`*_[\]])/g, '\\$1')
@@ -124,8 +139,8 @@ function escapeText(text: string): string {
  * Serialises the inline content of one rendered element.
  *
  * Returns `null` the moment it meets anything it cannot write back exactly:
- * a component, a styled span, an element it does not know. The caller falls
- * back to editing the Markdown, which loses nothing.
+ * a component, a span with attributes of its own, an element it does not know.
+ * The caller falls back to editing the Markdown, which loses nothing.
  */
 export function serialiseInline(root: { childNodes: Iterable<InlineNode> }): string | null {
   let out = ''
@@ -146,6 +161,18 @@ export function serialiseInline(root: { childNodes: Iterable<InlineNode> }): str
 
     if (tag === 'br' || tag === 'img') {
       out += MARKS[tag]('', el)
+      continue
+    }
+
+    // A span carrying only classes is a Comark text style, written back as one.
+    // Whether the source really was `[word]{.accent}` rather than a hand
+    // written `<span class="accent">` is what the round trip check decides.
+    const classes = tag === 'span' ? styledSpan(el) : null
+    if (classes) {
+      const inner = serialiseInline(el)
+      if (inner === null)
+        return null
+      out += `[${inner}]{${classes.map(name => `.${name}`).join(' ')}}`
       continue
     }
 

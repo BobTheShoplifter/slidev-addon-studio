@@ -156,3 +156,61 @@ function mapLines(selection: Selection, transform: (line: string) => string): Fo
     end: start + replaced.length,
   }
 }
+
+const RE_STYLE_CLOSE = /^\]\{((?:\s*\.[\w-]+)+)\s*\}/
+
+/**
+ * The Comark text style around a selection, if it sits inside one.
+ *
+ * `[word]{.accent}` is a text style; the selection may be the whole of it or
+ * any part of the word. Nested brackets are not looked through, which is what
+ * keeps a link's own brackets from reading as a style.
+ */
+export function styleAt(selection: Selection): string | null {
+  const { text, start, end } = selection
+  const whole = text.slice(start, end).match(/^\[([^[\]]*)\]\{((?:\s*\.[\w-]+)+)\s*\}$/)
+  if (whole)
+    return whole[2].trim().split(/\s+/)[0].slice(1)
+
+  const open = text.lastIndexOf('[', start - 1)
+  if (open < 0)
+    return null
+  const close = text.indexOf(']', end)
+  if (close < 0 || text.slice(open + 1, close).includes('['))
+    return null
+  const attrs = text.slice(close).match(RE_STYLE_CLOSE)
+  return attrs ? attrs[1].trim().split(/\s+/)[0].slice(1) : null
+}
+
+/**
+ * Gives the selection a text style, swaps the one it has, or takes it off.
+ *
+ * Written as Comark's `[word]{.accent}`, which is what the author would have
+ * typed. An empty name removes the style and leaves the word standing.
+ */
+export function setStyle(selection: Selection, name: string): FormatResult {
+  const { text, start, end } = selection
+  let before = text.slice(0, start)
+  let inner = text.slice(start, end)
+  let after = text.slice(end)
+
+  const whole = inner.match(/^\[([^[\]]*)\]\{(?:\s*\.[\w-]+)+\s*\}$/)
+  if (whole) {
+    inner = whole[1]
+  }
+  else {
+    const open = before.lastIndexOf('[')
+    const closing = after.match(/^([^[\]]*)\]\{(?:\s*\.[\w-]+)+\s*\}/)
+    if (open >= 0 && closing && !before.slice(open + 1).includes(']')) {
+      inner = before.slice(open + 1) + inner + closing[1]
+      before = before.slice(0, open)
+      after = after.slice(closing[0].length)
+    }
+  }
+
+  if (!name)
+    return { text: before + inner + after, start: before.length, end: before.length + inner.length }
+
+  const wrapped = `[${inner}]{.${name}}`
+  return { text: before + wrapped + after, start: before.length + 1, end: before.length + 1 + inner.length }
+}

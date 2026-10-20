@@ -2,10 +2,13 @@
 import type { BlockShape } from '../md/inline'
 import type { SourceRange } from '../types'
 import { computed, nextTick, ref, watch } from 'vue'
+import type { TextStyle } from '../md/text-styles'
+import { configs } from '@slidev/client/env.ts'
 import { blockShape, canEditContainer, canEditVisually, serialiseBlock, serialiseContainer } from '../md/inline'
-import { toggleBullet, toggleHeading, toggleQuote, toggleTagWrap, toggleWrap, toLink } from '../md/format'
+import { setStyle, styleAt, toggleBullet, toggleHeading, toggleQuote, toggleTagWrap, toggleWrap, toLink } from '../md/format'
 import { replaceInnerHtml, stripStudioAttrs } from '../md/html'
 import { getBlock, replaceBlock } from '../md/lines'
+import { readTextStyles } from '../md/text-styles'
 import { editing, reportError, selection } from '../state'
 import { useStudio } from '../context'
 import { onDomEvent } from '../composables/useDomEvent'
@@ -65,7 +68,29 @@ let heldKind: 'block' | 'container' | 'prop' | 'html' = 'block'
 let htmlTag = ''
 let htmlWas = ''
 
+/**
+ * The deck's named text styles, read from its stylesheets when the editor
+ * opens, each with the colour it paints so the dropdown can show it.
+ */
+const styles = ref<(TextStyle & { color?: string })[]>([])
 
+/**
+ * The style under the caret: a name the deck declares, `''` for a span whose
+ * class it does not, `null` when the caret is in plain text.
+ */
+const activeStyle = ref<string | null>(null)
+
+/** Whether `[word]{.accent}` means anything to this deck. */
+const comark = !!(configs.comark ?? configs.mdc)
+
+/*
+ * The selection as it was before the dropdown took focus.
+ *
+ * Opening a `<select>` moves focus out of the block, and with it, in some
+ * browsers, the selection the style was meant for. It is put back before the
+ * style is applied.
+ */
+let savedRange: Range | null = null
 
 const range = computed(() => selection.value?.range ?? null)
 
@@ -191,7 +216,104 @@ watch(editing, async (open) => {
     hold(element, element === picked ? undefined : picked)
   else
     box.value?.focus()
+
+  loadStyles(element)
+  updateActive()
 })
+
+/**
+ * Reads the deck's text styles and what each one paints.
+ *
+ * The colour is asked of a probe span given the class, inside the block being
+ * edited, so a theme rule scoped to the slide applies to it the way it does to
+ * the real thing. Nothing is offered unless Comark is on, since the style is
+ * written as `[word]{.accent}` and would otherwise show as typed.
+ */
+function loadStyles(host: HTMLElement) {
+  if (!comark) {
+    styles.value = []
+    return
+  }
+  styles.value = readTextStyles(document.styleSheets).map(style => ({ ...style, color: colorOf(style.name, host) }))
+}
+
+function colorOf(name: string, host: HTMLElement): string | undefined {
+  const probe = document.createElement('span')
+  probe.className = name
+  host.appendChild(probe)
+  const color = getComputedStyle(probe).color
+  probe.remove()
+  return color || undefined
+}
+
+/** The styled span the caret sits in, when it is one of the block's own. */
+function spanAround(): HTMLElement | null {
+  const chosen = window.getSelection()
+  if (!editable || !chosen || chosen.rangeCount === 0)
+    return null
+  const start = chosen.getRangeAt(0).startContainer
+  const host = (start.nodeType === Node.ELEMENT_NODE ? start : start.parentElement) as HTMLElement | null
+  const span = host?.closest<HTMLElement>('span[class]')
+  return span && span !== editable && editable.contains(span) ? span : null
+}
+
+function updateActive() {
+  if (!styles.value.length) {
+    activeStyle.value = null
+    return
+  }
+  if (mode.value === 'markdown') {
+    const area = box.value
+    activeStyle.value = area ? styleAt({ text: draft.value, start: area.selectionStart, end: area.selectionEnd }) : null
+    return
+  }
+  const span = spanAround()
+  if (!span) {
+    activeStyle.value = null
+    return
+  }
+  const name = (span.getAttribute('class') ?? '').trim().split(/\s+/)[0] ?? ''
+  activeStyle.value = styles.value.some(style => style.name === name) ? name : ''
+}
+
+/**
+ * Gives the selection a text style, swaps the one it has, or takes it off.
+ *
+ * In the block, the style is a span with the class, which is what the
+ * serialiser writes back as `[word]{.accent}`. In the Markdown it is written
+ * as that directly. An empty name removes the style and leaves the word.
+ */
+function applyStyle(name: string) {
+  if (mode.value === 'markdown') {
+    format(sel => setStyle(sel, name))
+    nextTick(updateActive)
+    return
+  }
+
+  const chosen = window.getSelection()
+  if (!editable || !chosen)
+    return
+  editable.focus()
+  if (savedRange) {
+    chosen.removeAllRanges()
+    chosen.addRange(savedRange)
+  }
+
+  const existing = spanAround()
+  if (existing) {
+    if (name)
+      existing.setAttribute('class', name)
+    else
+      unwrap(existing)
+    updateActive()
+    return
+  }
+
+  if (!name || chosen.isCollapsed)
+    return
+  wrapSelection('span')?.setAttribute('class', name)
+  updateActive()
+}
 
 /**
  * The Markdown a non-text child of a container stands for.
@@ -434,10 +556,10 @@ function format(action: (sel: { text: string, start: number, end: number }) => {
  * `execCommand` covers bold, italic, strikethrough and links; inline code has
  * no command of its own, so it is done by hand.
  */
-function wrapSelection(tag: string) {
+function wrapSelection(tag: string): HTMLElement | null {
   const chosen = window.getSelection()
   if (!chosen || chosen.rangeCount === 0 || chosen.isCollapsed)
-    return
+    return null
   const at = chosen.getRangeAt(0)
   const wrapper = document.createElement(tag)
   wrapper.appendChild(at.extractContents())
@@ -445,6 +567,33 @@ function wrapSelection(tag: string) {
   chosen.removeAllRanges()
   const after = document.createRange()
   after.selectNodeContents(wrapper)
+  chosen.addRange(after)
+  return wrapper
+}
+
+/**
+ * Lifts an element's children out in its place and selects them.
+ *
+ * The children are moved rather than the text replaced, so a mark nested
+ * inside this one survives being unwrapped. The nodes are not normalised
+ * afterwards, because the selection is expressed in terms of them.
+ */
+function unwrap(element: HTMLElement) {
+  const parent = element.parentNode
+  if (!parent)
+    return
+  const moved = [...element.childNodes]
+  for (const node of moved)
+    parent.insertBefore(node, element)
+  parent.removeChild(element)
+
+  const chosen = window.getSelection()
+  if (!moved.length || !chosen)
+    return
+  const after = document.createRange()
+  after.setStartBefore(moved[0])
+  after.setEndAfter(moved[moved.length - 1])
+  chosen.removeAllRanges()
   chosen.addRange(after)
 }
 
@@ -473,24 +622,7 @@ function toggleMark(tag: string, aliases: string[]) {
     return
   }
 
-  // Lift the children out rather than replacing the text, so a mark nested
-  // inside this one survives being unwrapped. The nodes are not normalised
-  // afterwards, because the range below is expressed in terms of them.
-  const parent = existing.parentNode
-  if (!parent)
-    return
-  const moved = [...existing.childNodes]
-  for (const node of moved)
-    parent.insertBefore(node, existing)
-  parent.removeChild(existing)
-
-  if (!moved.length)
-    return
-  const after = document.createRange()
-  after.setStartBefore(moved[0])
-  after.setEndAfter(moved[moved.length - 1])
-  chosen.removeAllRanges()
-  chosen.addRange(after)
+  unwrap(existing)
 }
 
 const marks = [
@@ -579,6 +711,23 @@ onDomEvent<KeyboardEvent>(document, 'keydown', (event) => {
   onKeydown(event)
 }, { capture: true })
 
+/*
+ * Follow the caret, so the dropdown shows the style of the word it is in.
+ *
+ * The selection is also remembered here, while it is still the block's: a
+ * press on the dropdown moves focus before its change event fires.
+ */
+onDomEvent(document, 'selectionchange', () => {
+  if (!editing.value)
+    return
+  if (mode.value === 'visual' && editable) {
+    const chosen = window.getSelection()
+    if (chosen && chosen.rangeCount && editable.contains(chosen.anchorNode))
+      savedRange = chosen.getRangeAt(0).cloneRange()
+  }
+  updateActive()
+})
+
 /** A click anywhere else finishes the edit, the way a canvas tool does. */
 onDomEvent<PointerEvent>(document, 'pointerdown', (event) => {
   if (mode.value !== 'visual' || !editing.value || !editable)
@@ -635,6 +784,25 @@ onDomEvent(window, 'resize', () => {
         </button>
       </template>
 
+      <select
+        v-if="styles.length"
+        class="studio-inline__style"
+        title="Text style"
+        :value="activeStyle === null ? '' : activeStyle === '' ? 'custom' : activeStyle"
+        @change="applyStyle(($event.target as HTMLSelectElement).value === 'custom' ? '' : ($event.target as HTMLSelectElement).value)"
+      >
+        <option value="">{{ activeStyle ? 'No style' : 'Style' }}</option>
+        <option v-if="activeStyle === ''" value="custom" disabled>Custom class</option>
+        <option
+          v-for="style in styles"
+          :key="style.name"
+          :value="style.name"
+          :style="style.color ? { color: style.color } : undefined"
+        >
+          {{ style.group ? `${style.group} · ${style.label}` : style.label }}
+        </option>
+      </select>
+
       <span class="studio-toolbar__divider" />
 
       <button
@@ -661,6 +829,8 @@ onDomEvent(window, 'resize', () => {
       spellcheck="false"
       rows="3"
       @keydown="onKeydown"
+      @keyup="updateActive"
+      @mouseup="updateActive"
       @blur="apply"
     />
   </div>

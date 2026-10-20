@@ -70,9 +70,21 @@ describe('serialiseInline', () => {
     expect(serialiseInline(root(el('strong', [text('bold')], { 'data-studio-src': '1,2' })))).toBe('**bold**')
   })
 
+  it('writes a span carrying only classes as a Comark text style', () => {
+    expect(serialiseInline(root(text('Build '), el('span', [text('presentations')], { class: 'accent' }), text(' faster.'))))
+      .toBe('Build [presentations]{.accent} faster.')
+    expect(serialiseInline(root(el('span', [text('two')], { class: 'hl red' })))).toBe('[two]{.hl .red}')
+    // Marks inside the span are written inside the brackets.
+    expect(serialiseInline(root(el('span', [el('strong', [text('loud')])], { class: 'accent' })))).toBe('[**loud**]{.accent}')
+    // The editor's own hints do not make it hand written markup.
+    expect(serialiseInline(root(el('span', [text('x')], { 'class': 'accent', 'data-studio-src': '1,2' })))).toBe('[x]{.accent}')
+  })
+
   it('refuses anything it cannot write back exactly', () => {
-    // A styled span is the author's own markup: dropping it would delete it.
-    expect(serialiseInline(root(el('span', [text('hacket')], { class: 'red' })))).toBeNull()
+    // A span with attributes of its own is the author's markup: dropping it
+    // would delete it, and there is no Markdown that says the same thing.
+    expect(serialiseInline(root(el('span', [text('hacket')], { class: 'red', style: 'color: red' })))).toBeNull()
+    expect(serialiseInline(root(el('span', [text('hacket')], { id: 'x' })))).toBeNull()
     // A component is not Markdown at all.
     expect(serialiseInline(root(text('text '), el('pill', [text('Hi')])))).toBeNull()
     expect(serialiseInline(root(el('div', [text('a block')])))).toBeNull()
@@ -105,7 +117,7 @@ describe('serialiseBlock', () => {
 
   it('refuses a list holding something it cannot write', () => {
     const shape = blockShape('- one')!
-    const list = el('ul', [el('li', [el('span', [text('one')], { class: 'red' })])])
+    const list = el('ul', [el('li', [el('span', [text('one')], { class: 'red', title: 'x' })])])
     expect(serialiseBlock(list, shape)).toBeNull()
   })
 })
@@ -131,9 +143,18 @@ describe('canEditVisually', () => {
   })
 
   it('refuses a block whose markup it does not recognise', () => {
+    // A hand written span renders the same as a Comark style, but writing it
+    // back as `[hacket.]{.red}` would rewrite the author's markup.
     const shape = blockShape('# Ikke bli <span class="red">hacket.</span>')!
     const heading = el('h1', [text('Ikke bli '), el('span', [text('hacket.')], { class: 'red' })])
     expect(canEditVisually('# Ikke bli <span class="red">hacket.</span>', heading, shape)).toBe(false)
+  })
+
+  it('accepts a Comark text style it can write back', () => {
+    const source = 'Build [presentations]{.accent} faster.'
+    const shape = blockShape(source)!
+    const p = el('p', [text('Build '), el('span', [text('presentations')], { class: 'accent' }), text(' faster.')])
+    expect(canEditVisually(source, p, shape)).toBe(true)
   })
 })
 
